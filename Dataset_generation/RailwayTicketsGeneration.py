@@ -33,6 +33,8 @@ def generateTicketsCsv(timetableData, numTickets, outputFilename):
         writer.writerow(["FullName", "PassportInfo", "Departure", "Destination", "DepartureDate", "ArrivalDate", "Train", "SeatChoice", "TotalCost", "PaymentCard"])
         
         seatData = {}
+        cardUsage = {}
+
         for _ in range(numTickets):
             trainInfo = random.choice(timetableData)
             trainNumber, departureCity, destinationCity, departureTime, arrivalTime, ticketPrice = trainInfo
@@ -42,9 +44,14 @@ def generateTicketsCsv(timetableData, numTickets, outputFilename):
                 seatChoice, additionalPrice = SeatGeneration.generateRandomSeat()
             seatData[(trainNumber, departureTime, seatChoice)] = True
 
-            personData = PersonGeneration.generatePerson()
-            fullName = f"{personData[0]} {personData[1]} {personData[2]}"
-            passportInfo = f"{personData[3]} {personData[4]}"
+            while True:
+                personData = PersonGeneration.generatePerson()
+                fullName = f"{personData[0]} {personData[1]} {personData[2]}"
+                passportInfo = f"{personData[3]} {personData[4]}"
+                paymentCard = personData[5]
+                if cardUsage.get(paymentCard, 0) < 5:
+                    break
+            cardUsage[paymentCard] = cardUsage.get(paymentCard, 0) + 1
 
             totalPrice = ticketPrice + additionalPrice
 
@@ -56,4 +63,3 @@ numTickets = int(input("Enter the number of tickets: "))
 outputFilename = "tickets.csv"
 generateTicketsCsv(timetableData, numTickets, outputFilename)
 print(f"Generated {numTickets} tickets and saved to {outputFilename}.")
-    
