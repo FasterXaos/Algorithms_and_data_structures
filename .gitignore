@@ -1,2 +1,8 @@
 build*/
+
 CMakeLists.txt.user
+
+__pycache__
+
+tickets.csv
+timetable.csv
