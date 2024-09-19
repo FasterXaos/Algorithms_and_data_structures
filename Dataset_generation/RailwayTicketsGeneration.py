@@ -34,6 +34,7 @@ def generateTicketsCsv(timetableData, numTickets, outputFilename):
         
         seatData = {}
         cardUsage = {}
+        passportSet = set()
 
         for _ in range(numTickets):
             trainInfo = random.choice(timetableData)
@@ -49,8 +50,11 @@ def generateTicketsCsv(timetableData, numTickets, outputFilename):
                 fullName = f"{personData[0]} {personData[1]} {personData[2]}"
                 passportInfo = f"{personData[3]} {personData[4]}"
                 paymentCard = personData[5]
-                if cardUsage.get(paymentCard, 0) < 5:
+
+                if passportInfo not in passportSet and cardUsage.get(paymentCard, 0) < 5:
                     break
+                
+            passportSet.add(passportInfo)
             cardUsage[paymentCard] = cardUsage.get(paymentCard, 0) + 1
 
             totalPrice = ticketPrice + additionalPrice

@@ -85,6 +85,8 @@ def generatePerson():
     result.append(cardNumberStr)
     return result
 
+print("Total of weights must be greater than zero")
+
 # Вводим веса для платежных систем
 binCodesOperatorWeights = []
 print("Enter weights for banking systems.")
