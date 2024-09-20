@@ -4,5 +4,5 @@ CMakeLists.txt.user
 
 __pycache__
 
-tickets.csv
+tickets.*
 timetable.csv

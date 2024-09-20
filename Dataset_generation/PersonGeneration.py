@@ -62,7 +62,7 @@ def generatePersonalData():
     passportSeries = f"{okatoRegion:02d}{issueYear:02d}"
     passportNumber = f"{fake.random_int(min=1, max=10**6-1):06d}"
 
-    return lastName, middleName, firstName, passportSeries, passportNumber
+    return lastName, firstName, middleName, passportSeries, passportNumber
 
 def generatePerson():
     personalData = generatePersonalData()
@@ -85,7 +85,7 @@ def generatePerson():
     result.append(cardNumberStr)
     return result
 
-print("Total of weights must be greater than zero")
+print("Weights must be greater than zero")
 
 # Вводим веса для платежных систем
 binCodesOperatorWeights = []
