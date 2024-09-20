@@ -47,7 +47,7 @@ def determineTrainSpeed(trainNumber):
 
 def generateOddNumbers(count, maxValue):
     if count > (maxValue + 1) // 2:
-        raise ValueError("Заданное значение count больше количества доступных нечетных чисел.")
+        raise ValueError("The specified count value is greater than the number of odd numbers available.")
     return random.sample(range(1, maxValue + 1, 2), count)
 
 
@@ -61,7 +61,7 @@ with open('russian_cities.csv', 'r', encoding='utf-8') as csvfile:
         cityData.append((cityName, latitude, longitude))
 
 russianAlphabet = 'АБВГДЕЖЗИКЛМНОПРСТУФХЧШЭЮЯ'
-numTrains = 345
+numTrains = 350
 timetable = []
 intervalBetweenTrips = 3
 
@@ -97,7 +97,7 @@ for trainNumber in generateOddNumbers(numTrains, 788):
         endDate = startDate + timedelta(days=random.randint(60, 90))  # Сезон длится 2-3 месяца
     else:
         # Круглогодичные поезда (001–150, 301–450, 701–788)
-        departureTime = startDate + timedelta(days=random.randint(0, 365), seconds=random.randint(0, 24 * 60 * 60))
+        departureTime = startDate + timedelta(seconds=random.randint(0, 24 * 60 * 60))
 
     while departureTime <= endDate:
         arrivalTime = departureTime + timedelta(seconds=travelTimeSeconds)
