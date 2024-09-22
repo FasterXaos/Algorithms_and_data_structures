@@ -182,13 +182,17 @@ def generateTicketsXls(timetableData, numTickets, outputFilename):
 timetableData = loadTimetable("timetable.csv")
 numTickets = int(input("Enter the number of tickets: "))
 
+if numTickets < 50000:
+    print("Number of tickets cannot be less than 50000. Setting to 50000.")
+    numTickets = 50000
+
 #outputFilename = "tickets.csv"
 #generateTicketsCsv(timetableData, numTickets, outputFilename)
 
-#outputFilename = "tickets.xml"
-#generateTicketsXml(timetableData, numTickets, outputFilename)
+outputFilename = "tickets.xml"
+generateTicketsXml(timetableData, numTickets, outputFilename)
 
-outputFilename = "tickets.xlsx"
-generateTicketsXls(timetableData, numTickets, outputFilename)
+#outputFilename = "tickets.xlsx"
+#generateTicketsXls(timetableData, numTickets, outputFilename)
 
 print(f"Generated {numTickets} tickets and saved to {outputFilename}.")
