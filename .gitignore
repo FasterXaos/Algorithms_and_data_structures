@@ -6,3 +6,4 @@ __pycache__
 
 tickets.*
 timetable.csv
+*.xml
