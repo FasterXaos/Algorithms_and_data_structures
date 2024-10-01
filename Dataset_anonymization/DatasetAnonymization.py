@@ -3,174 +3,276 @@ from tkinter import filedialog
 import pandas as pd
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+import datetime
 
-# Функция для форматирования XML с отступами
-def indent(elem, level=0):
-    i = "\n" + level * "  "
-    if len(elem):
-        if not elem.text or not elem.text.strip():
-            elem.text = i + "  "
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-        for subelem in elem:
-            indent(subelem, level + 1)
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = i
+binCodesBank = {
+    "ALFA-BANK": [
+        "27714", "19539", "65227", "15428", "77960", "28906",
+        "31417", "39077", "15400", "31727", "15481", "28804",
+        "34135", "58410", "58280", "77932", "28905", "78752",
+        "39000", "21118", "58450", "15429", "58279", "15482",
+        "58411", "79087", "19540", "79004", "77964", "10584",
+        "40237"],
+    "GAZPROMBANK": [
+        "26871", "42255", "21155", "29278", "18704", "26890"],
+    "OTKRITIE": [
+        "49025", "31674", "58620", "49024", "44218",
+        "32301", "30403", "44962"
+    ],
+    "TINKOFF": [
+        "20070", "37772", "37773", "37783", "37784", "70127",
+        "13990", "18901", "21324", "24468", "28041", "38994",
+        "44714", "48387", "51960", "53420", "53691", "55323",
+        "55442"
+    ],
+    "SBERBANK": [
+        "27620", "27966", "27616", "47972", "27972", "27406",
+        "27418", "47940", "47920", "76195", "27430", "27699",
+        "46998", "48438", "27433", "47935", "27416", "27672",
+        "47976", "27925", "48454", "27916", "48420", "46935",
+        "27659", "47959", "27459", "47938", "47942", "27444",
+        "27448", "48447", "27477", "27635", "48435", "48468",
+        "48422", "27411", "27428", "27601", "27472", "47949",
+        "47927", "27999", "27402", "27475", "47966", "31310",
+        "27959", "47948", "27920", "47928", "27602", "48459",
+        "27449", "27466", "47947", "27680", "48442", "15842",
+        "46901", "47932", "48401", "45037", "46972", "27427",
+        "47930", "27436", "27935", "27576"
+    ]
+}
 
-def calculate_k_anonymity():
-    file_path = filedialog.askopenfilename(filetypes=[("XML Files", "*.xml")])
-    if not file_path:
+citiesData = {}
+
+
+def anonymizeDataset(minKAnonymity=10):
+    resultLabel.config(text="Обработка файла...")
+    filePath = filedialog.askopenfilename(filetypes=[("XML Files", "*.xml")])
+    if not filePath:
+        resultLabel.config(text="Файл не выбран.")
         return
 
-    # Парсинг XML файла
-    tree = ET.parse(file_path)
-    root = tree.getroot()
+    xmlTree = ET.parse(filePath)
+    xmlRoot = xmlTree.getroot()
 
-    # Преобразование XML данных в pandas DataFrame
     data = []
-    for ticket in root.findall('Ticket'):
+    for ticket in xmlRoot.findall('Ticket'):
         row = {
-            'ФИО': ticket.find('FullName').text,
-            'Паспортные данные': ticket.find('PassportInfo').text,
-            'Откуда': ticket.find('Departure').text,
-            'Куда': ticket.find('Destination').text,
-            'Дата отъезда': ticket.find('DepartureDate').text,
-            'Дата приезда': ticket.find('ArrivalDate').text,
-            'Рейс': ticket.find('Train').text,
-            'Выбор вагона и места': ticket.find('SeatChoice').text,
-            'Стоимость': float(ticket.find('TotalCost').text),
-            'Карта оплаты': ticket.find('PaymentCard').text
+            'FullName': ticket.find('FullName').text,
+            'PassportInfo': ticket.find('PassportInfo').text,
+            'Departure': ticket.find('Departure').text,
+            'Destination': ticket.find('Destination').text,
+            'DepartureDate': ticket.find('DepartureDate').text,
+            'ArrivalDate': ticket.find('ArrivalDate').text,
+            'Train': ticket.find('Train').text,
+            'SeatChoice': ticket.find('SeatChoice').text,
+            'TotalCost': ticket.find('TotalCost').text,
+            'PaymentCard': ticket.find('PaymentCard').text
         }
         data.append(row)
-    df = pd.DataFrame(data)
-
-    # Получение списка выбранных квази-идентификаторов
-    selected_quasi_identifiers = [var.get() for var in var_list]
-    columns = ['ФИО',
-               'Паспортные данные',
-               'Откуда',
-               'Куда',
-               'Дата отъезда',
-               'Дата приезда',
-               'Рейс',
-               'Выбор вагона и места',
-               'Стоимость',
-               'Карта оплаты']
-    selected_columns = [column for column, is_selected in zip(columns, selected_quasi_identifiers) if is_selected]
-
-    if not selected_columns:
-        result_label.config(text="Выберите хотя бы один квази-идентификатор!")
-        return
-
-    # Подсчет K-анонимности
-    k_values = df.groupby(selected_columns).size().reset_index(name='Count')
-    kper = defaultdict(int)
-    for i in k_values['Count']:
-        kper[i] += i
-
-    # Расчет процентов для каждого K
-    kper_percentage = {i: kper[i] / len(df) * 100 for i in kper.keys()}
-
-    # Отображение результатов
-    result_text.delete(1.0, tk.END)
-    result_label.config(text="K-анонимность:")
-    for v in sorted(kper.keys()):
-        result_text.insert(tk.END, f"{v} (Количество: {kper[v]}, Процент: {kper_percentage[v]:.2f}%)\n")
-
-
-def anonymize_dataset():
-    file_path = filedialog.askopenfilename(filetypes=[("XML Files", "*.xml")])
-    if not file_path:
-        return
-
-    # Парсинг XML файла
-    tree = ET.parse(file_path)
-    root = tree.getroot()
-
-    # Преобразование XML данных в pandas DataFrame
-    data = []
-    for ticket in root.findall('Ticket'):
-        row = {
-            'ФИО': ticket.find('FullName').text,
-            'Паспортные данные': ticket.find('PassportInfo').text,
-            'Откуда': ticket.find('Departure').text,
-            'Куда': ticket.find('Destination').text,
-            'Дата отъезда': ticket.find('DepartureDate').text,
-            'Дата приезда': ticket.find('ArrivalDate').text,
-            'Рейс': ticket.find('Train').text,
-            'Выбор вагона и места': ticket.find('SeatChoice').text,
-            'Стоимость': float(ticket.find('TotalCost').text),
-            'Карта оплаты': ticket.find('PaymentCard').text
-        }
-        data.append(row)
-    df = pd.DataFrame(data)
-
-    # Создание нового XML файла с анонимизированными данными
-    new_root = ET.Element("Tickets")
     
-    for index, row in df.iterrows():
-        ticket_element = ET.Element("Ticket")
-        ET.SubElement(ticket_element, "FullName").text = row['ФИО']
-        ET.SubElement(ticket_element, "PassportInfo").text = row['Паспортные данные']
-        ET.SubElement(ticket_element, "Departure").text = row['Откуда']
-        ET.SubElement(ticket_element, "Destination").text = row['Куда']
-        ET.SubElement(ticket_element, "DepartureDate").text = row['Дата отъезда']
-        ET.SubElement(ticket_element, "ArrivalDate").text = row['Дата приезда']
-        ET.SubElement(ticket_element, "Train").text = row['Рейс']
-        ET.SubElement(ticket_element, "SeatChoice").text = row['Выбор вагона и места']
-        ET.SubElement(ticket_element, "TotalCost").text = str(row['Стоимость'])
-        ET.SubElement(ticket_element, "PaymentCard").text = row['Карта оплаты']
+    dataFrame = pd.DataFrame(data)
+
+    dataFrame['FullName'] = dataFrame['FullName'].apply(lambda fullName: determineGender(fullName.split()[1]))
+    dataFrame['PassportInfo'] = dataFrame['PassportInfo'].apply(maskPassportInfo)
+    dataFrame['Departure'] = dataFrame['Departure'].apply(categorizeCity)
+    dataFrame['Destination'] = dataFrame['Destination'].apply(categorizeCity)
+    dataFrame['DepartureDate'] = dataFrame['DepartureDate'].apply(categorizeDate)
+    dataFrame['ArrivalDate'] = dataFrame['ArrivalDate'].apply(categorizeDate)
+    dataFrame['Train'] = dataFrame['Train'].apply(categorizeTrainNumber)
+    dataFrame['TotalCost'] = dataFrame['TotalCost'].apply(categorizeCost)
+    dataFrame['SeatChoice'] = "XX"
+    dataFrame['PaymentCard'] = dataFrame['PaymentCard'].apply(maskPaymentCard)
+
+    columns = ['FullName', 'PassportInfo', 'Departure', 'Destination', 'DepartureDate', 'ArrivalDate', 'Train', 'SeatChoice', 'TotalCost', 'PaymentCard']
+    kValues = dataFrame.groupby(columns).size().reset_index(name='Count')
+    filteredKValues = kValues[kValues['Count'] >= minKAnonymity]
+    filteredDataFrame = dataFrame[dataFrame[columns].apply(tuple, axis=1).isin(filteredKValues[columns].apply(tuple, axis=1))]
+
+    newXmlRoot = ET.Element("Tickets")
+
+    for _, row in filteredDataFrame.iterrows():
+        ticketElement = ET.Element("Ticket")
+        ET.SubElement(ticketElement, "FullName").text = row['FullName']
+        ET.SubElement(ticketElement, "PassportInfo").text = row['PassportInfo']
+        ET.SubElement(ticketElement, "Departure").text = row['Departure']
+        ET.SubElement(ticketElement, "Destination").text = row['Destination']
+        ET.SubElement(ticketElement, "DepartureDate").text = row['DepartureDate']
+        ET.SubElement(ticketElement, "ArrivalDate").text = row['ArrivalDate']
+        ET.SubElement(ticketElement, "Train").text = row['Train']
+        ET.SubElement(ticketElement, "SeatChoice").text = row['SeatChoice']
+        ET.SubElement(ticketElement, "TotalCost").text = str(row['TotalCost'])
+        ET.SubElement(ticketElement, "PaymentCard").text = row['PaymentCard']
         
-        new_root.append(ticket_element)
-    
-    indent(new_root)  # Форматируем XML с отступами
+        newXmlRoot.append(ticketElement)
 
-    # Сохранение анонимизированного XML
-    save_path = filedialog.asksaveasfilename(defaultextension=".xml", filetypes=[("XML files", "*.xml")])
-    if save_path:
-        tree = ET.ElementTree(new_root)
-        tree.write(save_path, encoding='utf-8', xml_declaration=True)
-        result_label.config(text=f"Файл сохранен: {save_path}")
+    formatXmlWithIndentation(newXmlRoot)
+
+    resultLabel.config(text="Сохранение анонимизированного датасета...")
+    savePath = filedialog.asksaveasfilename(defaultextension=".xml", filetypes=[("XML files", "*.xml")])
+    if savePath:
+        newXmlTree = ET.ElementTree(newXmlRoot)
+        newXmlTree.write(savePath, encoding='utf-8', xml_declaration=True)
+        resultLabel.config(text=f"Файл сохранен: {savePath}")
     else:
-        result_label.config(text="Сохранение отменено.")
+        resultLabel.config(text="Сохранение отменено.")
+
+def calculateKAnonymity(maxDisplayValues=5):
+    resultLabel.config(text="Обработка файла...")
+    filePath = filedialog.askopenfilename(filetypes=[("XML Files", "*.xml")])
+    if not filePath:
+        resultLabel.config(text="Файл не выбран.")
+        return
+
+    xmlTree = ET.parse(filePath)
+    xmlRoot = xmlTree.getroot()
+
+    data = []
+    for ticket in xmlRoot.findall('Ticket'):
+        row = {
+            'FullName': ticket.find('FullName').text,
+            'PassportInfo': ticket.find('PassportInfo').text,
+            'Departure': ticket.find('Departure').text,
+            'Destination': ticket.find('Destination').text,
+            'DepartureDate': ticket.find('DepartureDate').text,
+            'ArrivalDate': ticket.find('ArrivalDate').text,
+            'Train': ticket.find('Train').text,
+            'SeatChoice': ticket.find('SeatChoice').text,
+            'TotalCost': ticket.find('TotalCost').text,
+            'PaymentCard': ticket.find('PaymentCard').text
+        }
+        data.append(row)
+    dataFrame = pd.DataFrame(data)
+
+    selectedQuasiIdentifiers = [variable.get() for variable in variableList]
+    columns = ['FullName', 'PassportInfo', 'Departure', 'Destination', 'DepartureDate', 'ArrivalDate', 'Train', 'SeatChoice', 'TotalCost', 'PaymentCard']
+    selectedColumns = [column for column, isSelected in zip(columns, selectedQuasiIdentifiers) if isSelected]
+
+    if not selectedColumns:
+        resultLabel.config(text="Выберите хотя бы один квази-идентификатор!")
+        return
+
+    kValues = dataFrame.groupby(selectedColumns).size().reset_index(name='Count')
+    kPerGroup = defaultdict(int)
+    for count in kValues['Count']:
+        kPerGroup[count] += count
+
+    kPerPercentage = {group: kPerGroup[group] / len(dataFrame) * 100 for group in kPerGroup.keys()}
+
+    resultText.delete(1.0, tk.END)
+    resultLabel.config(text="K-анонимность:")
+    
+    sortedKValues = sorted(kPerGroup.keys())
+    for value in sortedKValues[:maxDisplayValues]:
+        resultText.insert(tk.END, f"{value} (Количество: {kPerGroup[value]}, Процент: {kPerPercentage[value]:.2f}%)\n")
+    
+    if 1 in kPerGroup:
+        resultText.insert(tk.END, "\nЗаписи с K-анонимностью равной 1:\n")
+        recordsWithK1 = kValues[kValues['Count'] == 1]
+        for _, row in recordsWithK1.iterrows():
+            resultText.insert(tk.END, f"{row[selectedColumns].to_dict()}\n")
+
+def categorizeCity(city):
+    return citiesData.get(city, city)
+
+def categorizeCost(cost):
+    cost = float(cost)
+    if cost < 2000:
+        return "Низкая"
+    elif 2000 <= cost < 4000:
+        return "Средняя"
+    else:
+        return "Высокая"
+
+def categorizeDate(dateString):
+    dateObject = datetime.datetime.strptime(dateString, '%Y-%m-%d-%H:%M')
+    return f"{dateObject.year}"
+
+def categorizeTrainNumber(trainNumber):
+    trainNumber = trainNumber[:-1]
+    number = int(trainNumber)
+    
+    if 1 <= number <= 598:
+        return "Пассажирский поезд"
+    elif 701 <= number <= 750:
+        return "Скоростной поезд"
+    elif 751 <= number <= 788:
+        return "Высокоскоростной поезд"
+    
+def determineGender(name):
+    vowels = 'АаУуЕеЫыОоЭэЮюИиЯя'
+    return "Ж" if name[-1] in vowels else "М"
+
+def formatXmlWithIndentation(element, level=0):
+    indentValue = "\n" + level * "  "
+    if len(element):
+        if not element.text or not element.text.strip():
+            element.text = indentValue + "  "
+        if not element.tail or not element.tail.strip():
+            element.tail = indentValue
+        for subElement in element:
+            formatXmlWithIndentation(subElement, level + 1)
+        if not element.tail or not element.tail.strip():
+            element.tail = indentValue
+    else:
+        if level and (not element.tail or not element.tail.strip()):
+            element.tail = indentValue
+
+def loadCitiesData():
+    global citiesData
+    filePath = 'russian_cities.csv'
+    try:
+        with open(filePath, mode='r', encoding='utf-8') as file:
+            citiesData = pd.read_csv(file, delimiter=';', encoding='utf-8').set_index('Город')['Федеральный округ'].to_dict()
+        resultLabel.config(text="Данные о городах загружены.")
+    except Exception as e:
+        resultLabel.config(text=f"Ошибка загрузки данных: {e}")
+
+def maskPaymentCard(paymentCard):
+    binCode = paymentCard[1:6]
+    for bank, binCodes in binCodesBank.items():
+        if binCode in binCodes:
+            return bank
+    return "Неизвестный банк"
+
+def maskPassportInfo(passport):
+    return "XXXX XXXXXX"
 
 
-root = tk.Tk()
-root.geometry("600x300")
-root.title("K-Anonymity Calculator")
+rootWindow = tk.Tk()
+rootWindow.geometry("700x300")
+rootWindow.title("K-Anonymity Calculator")
 
-toolbar_frame = tk.Frame(root)
-toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+toolbarFrame = tk.Frame(rootWindow)
+toolbarFrame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
 
-file_button0 = tk.Button(toolbar_frame, text="Посчитать К-анонимити", command=calculate_k_anonymity)
-file_button1 = tk.Button(toolbar_frame, text="Обезличить датасет", command=anonymize_dataset)
+calculateKAnonymityButton = tk.Button(toolbarFrame, text="Посчитать К-анонимити", command=calculateKAnonymity)
+anonymizeDatasetButton = tk.Button(toolbarFrame, text="Обезличить датасет", command=anonymizeDataset)
 
-file_button0.pack(side=tk.LEFT, padx=5)
-file_button1.pack(side=tk.LEFT, padx=5)
+calculateKAnonymityButton.pack(side=tk.LEFT, padx=5)
+anonymizeDatasetButton.pack(side=tk.LEFT, padx=5)
 
-main_frame = tk.Frame(root)
-main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+mainFrame = tk.Frame(rootWindow)
+mainFrame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-quasi_identifiers_frame = tk.Frame(main_frame)
-quasi_identifiers_frame.grid(row=0, column=0, sticky="n")
+quasiIdentifiersFrame = tk.Frame(mainFrame)
+quasiIdentifiersFrame.grid(row=0, column=0, sticky="n")
 
-var_list = []
+variableList = []
 for column in ['ФИО', 'Паспортные данные', 'Откуда', 'Куда', 'Дата отъезда', 'Дата приезда', 'Рейс', 'Выбор вагона и места', 'Стоимость', 'Карта оплаты']:
-    var = tk.IntVar()
-    checkbox = tk.Checkbutton(quasi_identifiers_frame, text=column, variable=var)
+    variable = tk.IntVar()
+    checkbox = tk.Checkbutton(quasiIdentifiersFrame, text=column, variable=variable)
     checkbox.pack(anchor="w")
-    var_list.append(var)
+    variableList.append(variable)
 
-result_frame = tk.Frame(main_frame)
-result_frame.grid(row=0, column=1, padx=10, sticky="n")
+resultFrame = tk.Frame(mainFrame)
+resultFrame.grid(row=0, column=1, padx=10, sticky="n")
 
-result_label = tk.Label(result_frame, text="Результаты:")
-result_label.pack()
+resultLabel = tk.Label(resultFrame, text="Результаты:")
+resultLabel.pack()
 
-result_text = tk.Text(result_frame, height=14, width=50)
-result_text.pack()
+resultText = tk.Text(resultFrame, height=14, width=64)
+resultText.pack()
 
-root.mainloop()
+loadCitiesData()
+
+rootWindow.mainloop()
