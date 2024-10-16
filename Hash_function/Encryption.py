@@ -89,8 +89,8 @@ ButtonSHA256.grid(row=0, column=2, padx=5, pady=5)
 ButtonSHA512 = tk.Button(FrameHashButtons, text="SHA-512", command=HashUsingSHA512)
 ButtonSHA512.grid(row=0, column=3, padx=5, pady=5)
 
-root.grid_columnconfigure(0, weight=0)  # Label column
-root.grid_columnconfigure(1, weight=1)  # Entry column (stretched more)
+root.grid_columnconfigure(0, weight=0)
+root.grid_columnconfigure(1, weight=1)
 root.grid_columnconfigure(2, weight=0)
 
 root.mainloop()
