@@ -1,9 +1,3 @@
 build*/
-
 CMakeLists.txt.user
-
 __pycache__
-
-tickets.*
-timetable.csv
-*.xml
