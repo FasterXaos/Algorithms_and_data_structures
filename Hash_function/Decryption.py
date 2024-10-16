@@ -30,6 +30,9 @@ def selectSaltRemovedFile():
 
 def extractData(filePath, hashcatDir):
     df = pd.read_excel(filePath)
+    if df.empty:
+        messagebox.showerror("Ошибка", "Файл пуст или не содержит данных.")
+        return 0, None
     hashes = df.iloc[:, 0].dropna().values
     hashesFilePath = os.path.join(hashcatDir, "hashes.txt")
     with open(hashesFilePath, "w") as f:
@@ -37,10 +40,23 @@ def extractData(filePath, hashcatDir):
             f.write(f"{h}\n")
     return len(hashes), hashesFilePath
 
+def determineHashType(df):
+    sample_hash = df.iloc[0, 0]
+    if len(sample_hash) == 32:
+        return "0"  # MD5
+    elif len(sample_hash) == 40:
+        return "100"  # SHA-1
+    elif len(sample_hash) == 64:
+        return "1400"  # SHA-256
+    elif len(sample_hash) == 128:
+        return "1700"  # SHA-512
+    else:
+        messagebox.showerror("Ошибка", "Не удалось определить метод шифрования по длине хеша.")
+        return None
+
 def runHashcat():
     filePath = fileEntry.get()
     savePath = saveEntry.get()
-    
     if not filePath or not savePath:
         messagebox.showerror("Ошибка", "Необходимо выбрать файл и место сохранения.")
         return
@@ -50,13 +66,17 @@ def runHashcat():
     hashcatExe = os.path.join(hashcatDir, 'hashcat.exe')
     
     numHashes, hashesFilePath = extractData(filePath, hashcatDir)
-    
     if numHashes == 0:
         messagebox.showerror("Ошибка", "В файле не найдено хешей для расшифровки.")
         return
+
+    df = pd.read_excel(filePath)
+    hashType = determineHashType(df)
+    if not hashType:
+        return
     
     hashcatCommand = [
-        hashcatExe, "-m", "0",
+        hashcatExe, "-m", hashType,
         "-a", "3",
         "-o", savePath,
         hashesFilePath,
@@ -75,13 +95,15 @@ def findAndApplySalt():
     filePath = fileEntry.get()
     decryptedFilePath = decryptedFileEntry.get()
     saltRemovedSavePath = saltRemovedEntry.get()
-
     if not filePath or not decryptedFilePath or not saltRemovedSavePath:
         messagebox.showerror("Ошибка", "Необходимо выбрать все файлы.")
         return
 
     df = pd.read_excel(filePath)
     knownNumbers = df.iloc[:, 2].dropna().astype(int).tolist()
+    if not knownNumbers:
+        messagebox.showerror("Ошибка", "Не найдено известных номеров для вычисления соли.")
+        return
 
     decryptedDict = {}
     with open(decryptedFilePath, 'r') as f:
@@ -108,7 +130,6 @@ def findAndApplySalt():
         return list(salts)
 
     salts = computeSalts(knownNumbers, decryptedDict)
-
     if not salts:
         messagebox.showerror("Ошибка", "Соль не найдена.")
         return
@@ -122,6 +143,7 @@ def findAndApplySalt():
 
     foundSaltsMessage = f"Найдены соли: {', '.join(map(str, salts))}\nПрименена первая соль: {selectedSalt}"
     messagebox.showinfo("Успех", f"Соль применена и результат сохранен в {saltRemovedSavePath}\n{foundSaltsMessage}")
+
 
 root = tk.Tk()
 root.title("Расшифровка телефонных номеров с Hashcat")
