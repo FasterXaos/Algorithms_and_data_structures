@@ -34,26 +34,30 @@ class GeneticAlgorithmApp:
         tk.Label(root, text="Количество поколений").grid(row=5, column=0, sticky="w")
         tk.Entry(root, textvariable=self.numGenerations).grid(row=5, column=1, sticky="we")
 
+        # Переключатель кодировки
+        self.encodingType = tk.BooleanVar(value=False)  # False для вещественной, True для целочисленной
+        tk.Checkbutton(root, text="Использовать целочисленную кодировку", variable=self.encodingType).grid(row=6, column=0, columnspan=2, sticky="w")
+
         # Кнопка запуска алгоритма
-        tk.Button(root, text="Рассчитать хромосомы", command=self.runAlgorithm).grid(row=6, column=0, columnspan=2, sticky="we")
+        tk.Button(root, text="Рассчитать хромосомы", command=self.runAlgorithm).grid(row=7, column=0, columnspan=2, sticky="we")
 
         # Поле для отображения количества прошедших поколений
-        tk.Label(root, text="Количество прошлых поколений: ").grid(row=7, column=0, sticky="w")
+        tk.Label(root, text="Количество прошлых поколений: ").grid(row=8, column=0, sticky="w")
         self.pastGenerations = tk.Label(root, text="0")
-        self.pastGenerations.grid(row=7, column=1, sticky="w")
+        self.pastGenerations.grid(row=8, column=1, sticky="w")
 
         # Поля для отображения лучших решений
-        tk.Label(root, text="Лучшие решения:").grid(row=8, column=0, columnspan=2, sticky="w")
+        tk.Label(root, text="Лучшие решения:").grid(row=9, column=0, columnspan=2, sticky="w")
         self.resultX1 = tk.Label(root, text="x1 = ")
-        self.resultX1.grid(row=9, column=0, sticky="w")
+        self.resultX1.grid(row=10, column=0, sticky="w")
         self.resultX2 = tk.Label(root, text="x2 = ")
-        self.resultX2.grid(row=10, column=0, sticky="w")
+        self.resultX2.grid(row=11, column=0, sticky="w")
         self.resultFitness = tk.Label(root, text="Значение функции = ")
-        self.resultFitness.grid(row=11, column=0, columnspan=2, sticky="w")
+        self.resultFitness.grid(row=12, column=0, columnspan=2, sticky="w")
 
         # Таблица для отображения детей последнего поколения
         self.historyTable = ttk.Treeview(root, columns=("Index", "x1", "x2", "Fitness"), show='headings')
-        self.historyTable.grid(row=0, column=3, rowspan=12, padx=5, sticky="nswe")
+        self.historyTable.grid(row=0, column=3, rowspan=13, padx=5, sticky="nswe")
 
         # Задаем ширину столбцов таблицы
         self.historyTable.column("Index", width=50, anchor="center")
@@ -78,14 +82,24 @@ class GeneticAlgorithmApp:
 
     # Инициализация популяции
     def initializePopulation(self, numChromosomes, minGene, maxGene):
-        return np.random.uniform(minGene, maxGene, (numChromosomes, 2))
+        if self.encodingType.get():
+            # Приведение к целым числам для целочисленной кодировки
+            return np.random.randint(int(minGene), int(maxGene) + 1, (numChromosomes, 2))  # Целочисленная кодировка
+        else:
+            return np.random.uniform(minGene, maxGene, (numChromosomes, 2))  # Вещественная кодировка
 
     # Селекция родителей
-    def tournamentSelection(self, population, fitness, k=3):
+    def tournamentSelection(self, population, fitness, k=7, probablyTheBest=0.9):
         selected = []
         for _ in range(2):
             participants = random.sample(range(len(population)), k)
-            winner = min(participants, key=lambda idx: fitness[idx])
+            participants.sort(key=lambda idx: fitness[idx])
+
+            if random.random() < probablyTheBest:
+                winner = participants[0]
+            else:
+                winner = random.choice(participants[1:]) 
+
             selected.append(population[winner])
         return np.array(selected)
 
@@ -100,7 +114,11 @@ class GeneticAlgorithmApp:
     def mutateChromosome(self, chromosome, mutationRate, minGene, maxGene):
         if random.random() < mutationRate:
             geneToMutate = random.randint(0, 1)
-            chromosome[geneToMutate] = np.clip(chromosome[geneToMutate] + np.random.uniform(-1, 1), minGene, maxGene)
+            if self.encodingType.get():  # Целочисленная кодировка
+                # Приведение к целым числам для мутации
+                chromosome[geneToMutate] = random.randint(int(minGene), int(maxGene))
+            else:  # Вещественная кодировка
+                chromosome[geneToMutate] = np.clip(chromosome[geneToMutate] + np.random.uniform(-1, 1), minGene, maxGene)
         return chromosome
 
     def runAlgorithm(self):
