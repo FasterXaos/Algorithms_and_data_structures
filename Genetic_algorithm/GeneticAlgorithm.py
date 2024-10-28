@@ -9,7 +9,7 @@ class GeneticAlgorithmApp:
         self.root.title("Genetic algorithm")
 
         root.grid_columnconfigure(3, weight=1)
-        root.grid_rowconfigure(11, weight=1)
+        root.grid_rowconfigure(12, weight=1)
 
         # Поля ввода параметров
         tk.Label(root, text="Функция: x1^2 + 3*x2^2 + 2*x1*x2").grid(row=0, column=0, columnspan=3, sticky="w")
