@@ -10,9 +10,8 @@ class ParticleSwarmOptimizationApp:
         self.root.title("Particle Swarm Optimization")
 
         root.grid_columnconfigure(3, weight=1)
-        root.grid_rowconfigure(11, weight=1)
+        root.grid_rowconfigure(12, weight=1)
 
-        # Поля ввода параметров
         tk.Label(root, text="Функция: x1^2 + 3*x2^2 + 2*x1*x2").grid(row=0, column=0, columnspan=3, sticky="w")
         
         self.velocityFactor = tk.DoubleVar(value=0.5)
@@ -35,24 +34,23 @@ class ParticleSwarmOptimizationApp:
         tk.Label(root, text="Количество проходов").grid(row=5, column=0, sticky="w")
         tk.Entry(root, textvariable=self.numIterations).grid(row=5, column=1, sticky="we")
 
-        # Кнопка запуска алгоритма
-        tk.Button(root, text="Рассчитать частицы", command=self.runAlgorithm).grid(row=6, column=0, columnspan=2, sticky="we")
+        self.useInertiaWeight = tk.BooleanVar(value=True)
+        tk.Checkbutton(root, text="Использовать инерцию веса", variable=self.useInertiaWeight).grid(row=6, column=0, columnspan=2, sticky="w")
 
-        # Поле для отображения количества пройденных проходов
-        tk.Label(root, text="Количество пройденных проходов: ").grid(row=7, column=0, sticky="w")
+        tk.Button(root, text="Рассчитать частицы", command=self.runAlgorithm).grid(row=7, column=0, columnspan=2, sticky="we")
+
+        tk.Label(root, text="Количество пройденных проходов: ").grid(row=8, column=0, sticky="w")
         self.iterationCount = tk.Label(root, text="0")
-        self.iterationCount.grid(row=7, column=1, sticky="w")
+        self.iterationCount.grid(row=8, column=1, sticky="w")
 
-        # Поля для отображения лучшего решения
-        tk.Label(root, text="Лучшие решения:").grid(row=8, column=0, columnspan=2, sticky="w")
+        tk.Label(root, text="Лучшие решения:").grid(row=9, column=0, columnspan=2, sticky="w")
         self.resultX1 = tk.Label(root, text="x1 = ")
-        self.resultX1.grid(row=9, column=0, sticky="w")
+        self.resultX1.grid(row=10, column=0, sticky="w")
         self.resultX2 = tk.Label(root, text="x2 = ")
-        self.resultX2.grid(row=10, column=0, sticky="w")
+        self.resultX2.grid(row=11, column=0, sticky="w")
         self.resultFitness = tk.Label(root, text="Значение функции = ")
-        self.resultFitness.grid(row=11, column=0, columnspan=2, sticky="w")
+        self.resultFitness.grid(row=12, column=0, columnspan=2, sticky="w")
 
-        # Поле для графика
         self.minPosition = minPosition
         self.maxPosition = maxPosition
         self.figure, self.axes = plt.subplots()
@@ -64,7 +62,6 @@ class ParticleSwarmOptimizationApp:
         self.canvas = FigureCanvasTkAgg(self.figure, master=root)
         self.canvas.get_tk_widget().grid(row=0, column=3, rowspan=13, padx=5, sticky="nswe")
 
-        # Инициализация параметров алгоритма
         self.particles = None
         self.velocities = None
         self.personalBest = None
@@ -73,11 +70,9 @@ class ParticleSwarmOptimizationApp:
         self.globalBestFitness = float('inf')
         self.iteration = 0
 
-    # Функция оценки приспособленности (фитнесс-функция)
     def fitnessFunction(self, x1, x2):
         return x1**2 + 3 * x2**2 + 2 * x1 * x2
 
-    # Инициализация частиц
     def initializeParticles(self, numParticles):
         self.particles = np.random.uniform(self.minPosition, self.maxPosition, (numParticles, 2))
         self.velocities = np.random.uniform(-2, 2, (numParticles, 2))
@@ -89,13 +84,11 @@ class ParticleSwarmOptimizationApp:
         self.globalBest = self.personalBest[bestParticleIdx]
         self.globalBestFitness = self.personalBestFitness[bestParticleIdx]
 
-    # Обновление позиций и скоростей частиц
     def updateParticles(self):
-        velocityFactor = self.velocityFactor.get()
+        velocityFactor = self.velocityFactor.get() if self.useInertiaWeight.get() else 0
         personalBestFactor = self.personalBestFactor.get()
         globalBestFactor = self.globalBestFactor.get()
 
-        # Обновление скорости
         for i, particle in enumerate(self.particles):
             r1, r2 = random.random(), random.random()
             self.velocities[i] = (
@@ -103,14 +96,10 @@ class ParticleSwarmOptimizationApp:
                 + personalBestFactor * r1 * (self.personalBest[i] - particle)
                 + globalBestFactor * r2 * (self.globalBest - particle)
             )
-
-            # Обновление позиции
             self.particles[i] += self.velocities[i]
 
-            # Оценка новой позиции
             fitness = self.fitnessFunction(self.particles[i][0], self.particles[i][1])
 
-            # Обновление личного и глобального лучшего решения
             if fitness < self.personalBestFitness[i]:
                 self.personalBest[i] = self.particles[i]
                 self.personalBestFitness[i] = fitness
@@ -140,23 +129,19 @@ class ParticleSwarmOptimizationApp:
         numParticles = self.numParticles.get()
         numIterations = self.numIterations.get()
 
-        # Инициализация частиц при первом запуске
         if self.particles is None:
             self.initializeParticles(numParticles)
 
-        # Выполнение указанного числа проходов
         for _ in range(numIterations):
             self.updateParticles()
             self.iteration += 1
 
-        # Обновление графика и информации о лучшем решении
         self.plotParticles()
         self.iterationCount.config(text=str(self.iteration))
         self.resultX1.config(text=f"x1 = {self.globalBest[0]:.8f}")
         self.resultX2.config(text=f"x2 = {self.globalBest[1]:.8f}")
         self.resultFitness.config(text=f"Значение функции = {self.globalBestFitness:.8f}")
 
-# Запуск GUI
 root = tk.Tk()
 app = ParticleSwarmOptimizationApp(root, minPosition=-6.0, maxPosition=6.0)
 root.mainloop()
