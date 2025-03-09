@@ -90,17 +90,22 @@ class TSPApp(QMainWindow):
         self.redrawGraph()
 
     def addNodeOrEdge(self, event):
-        scenePos = self.graphView.mapToScene(event.pos())
-        clickedNode = self.findClickedNode(scenePos)
+        if event.button() == Qt.RightButton:
+            self.undoAction()
+            return
 
-        if clickedNode is None:
-            self.addNode(scenePos)
-        elif self.selectedNode is None:
-            self.selectedNode = clickedNode
-        else:
-            if self.selectedNode != clickedNode:
-                self.addEdge(self.selectedNode, clickedNode)
-            self.selectedNode = None
+        if event.button() == Qt.LeftButton:   
+            scenePos = self.graphView.mapToScene(event.pos())
+            clickedNode = self.findClickedNode(scenePos)
+
+            if clickedNode is None:
+                self.addNode(scenePos)
+            elif self.selectedNode is None:
+                self.selectedNode = clickedNode
+            else:
+                if self.selectedNode != clickedNode:
+                    self.addEdge(self.selectedNode, clickedNode)
+                self.selectedNode = None
 
     def clearGraph(self):
         self.graphScene.clear()
