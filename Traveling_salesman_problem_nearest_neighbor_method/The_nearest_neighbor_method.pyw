@@ -1,16 +1,16 @@
-import sys
-import time
+import sys, time
 import numpy as np
+import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
-                             QTextEdit, QTableWidget, QTableWidgetItem, QGraphicsScene, QGraphicsView)
-from PyQt5.QtGui import QPen, QBrush, QPainter, QPolygonF
+                             QTextEdit, QTableWidget, QTableWidgetItem, QGraphicsScene, QGraphicsView, QCheckBox)
+from PyQt5.QtGui import QPen, QBrush, QPainter, QPolygonF, QIcon
 from PyQt5.QtCore import Qt, QPointF
-
 
 class TSPApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
+        #self.generateTestGraph()
 
     def initUI(self):
         self.setWindowTitle("Коммивояжер - метод ближайшего соседа")
@@ -31,6 +31,8 @@ class TSPApp(QMainWindow):
 
         self.clearButton = QPushButton("Очистить")
         self.clearButton.clicked.connect(self.clearGraph)
+
+        self.useModificationCheckBox = QCheckBox("Использовать модификацию")
 
         self.resultText = QTextEdit()
         self.resultText.setReadOnly(True)
@@ -58,6 +60,7 @@ class TSPApp(QMainWindow):
         leftLayout.addWidget(self.table)
         leftLayout.addWidget(QLabel("Рассчитанный путь"))
         leftLayout.addWidget(self.resultText)
+        leftLayout.addWidget(self.useModificationCheckBox)
         leftLayout.addWidget(self.calculateButton)
         leftLayout.addWidget(self.undoButton)
         leftLayout.addWidget(self.clearButton)
@@ -144,7 +147,7 @@ class TSPApp(QMainWindow):
         for i, (x, y) in self.nodePositions.items():
             self.solutionScene.addEllipse(x - 10, y - 10, 20, 20, pen, brush)
             text = self.solutionScene.addText(str(i))
-            text.setPos(x - 5, y - 10)
+            text.setPos(x - text.boundingRect().width() / 2, y - text.boundingRect().height() / 2)
 
         for i in range(len(path) - 1):
             x1, y1 = self.nodePositions[path[i]]
@@ -156,6 +159,25 @@ class TSPApp(QMainWindow):
             if (x - 20 <= pos.x() <= x + 20) and (y - 20 <= pos.y() <= y + 20):
                 return i
         return None
+    
+    def generateTestGraph(self):
+        num_nodes = 30
+        self.nodes = list(range(num_nodes))
+        self.edges = []
+
+        adjacency_matrix = np.random.randint(0, 5, size=(num_nodes, num_nodes))
+        np.fill_diagonal(adjacency_matrix, 0)
+
+        for i in range(num_nodes):
+            for j in range(num_nodes):
+                if adjacency_matrix[i, j] > 0:
+                    self.edges.append([i, j, adjacency_matrix[i, j]])
+
+        df = pd.DataFrame(adjacency_matrix, columns=[f"V{j}" for j in range(num_nodes)], index=[f"V{i}" for i in range(num_nodes)])
+        df.to_excel("adjacency_matrix.xlsx")
+
+        self.nodePositions = {i: (np.random.randint(50, 850), np.random.randint(50, 550)) for i in self.nodes}
+        self.redrawGraph()
 
     def getDistance(self, i, j):
         weights = [edge[2] for edge in self.edges if (edge[0] == i and edge[1] == j)]
@@ -201,7 +223,12 @@ class TSPApp(QMainWindow):
         bestPath = None
         bestDistance = float("inf")
 
-        for start in self.nodes:
+        if self.useModificationCheckBox.isChecked():
+            startNodes = self.nodes
+        else:
+            startNodes = [self.nodes[0]] 
+
+        for start in startNodes:
             path = [start]
             unvisited = set(self.nodes) - {start}
             totalDistance = 0
