@@ -10,7 +10,7 @@ class TSPApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
-        #self.generateTestGraph()
+        self.generateTestGraph()
 
     def initUI(self):
         self.setWindowTitle("Коммивояжер - метод ближайшего соседа")
@@ -161,7 +161,7 @@ class TSPApp(QMainWindow):
         return None
     
     def generateTestGraph(self):
-        num_nodes = 30
+        num_nodes = 6
         self.nodes = list(range(num_nodes))
         self.edges = []
 
@@ -218,7 +218,7 @@ class TSPApp(QMainWindow):
         if not self.edges:
             return
 
-        start_time = time.perf_counter()
+        startTime = time.perf_counter()
 
         bestPath = None
         bestDistance = float("inf")
@@ -246,13 +246,13 @@ class TSPApp(QMainWindow):
                 bestDistance = totalDistance
                 bestPath = path
        
-        end_time = time.perf_counter()
-        elapsed_time = end_time - start_time
+        endTime = time.perf_counter()
+        elapsedTime = endTime - startTime
 
         if bestPath:
             self.resultText.setText(f"Лучший путь: {' -> '.join(map(str, bestPath))}")
             self.resultText.append(f"Длина пути: {bestDistance:.4f}")
-            self.resultText.append(f"Время выполнения: {elapsed_time:.4f} сек")
+            self.resultText.append(f"Время выполнения: {elapsedTime:.4f} сек")
             self.drawSolution(bestPath)
         else:
             self.resultText.setText("Невозможно найти путь, соединяющий все вершины.")
