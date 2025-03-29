@@ -268,11 +268,9 @@ class TSPApp(QMainWindow):
         df = pd.DataFrame(adjacency_matrix, columns=[f"V{j}" for j in range(num_nodes)], index=[f"V{i}" for i in range(num_nodes)])
         df.to_excel(filePath)
 
-    def solveTsp(self, maxIterations=100000):
+    def solveTsp(self, maxIterations=10000):
         if not self.edges:
             return
-        
-        startTime = time.perf_counter()
 
         def totalDistance(path):
             return sum(self.getDistance(path[i], path[i + 1]) for i in range(len(path) - 1))
@@ -288,40 +286,42 @@ class TSPApp(QMainWindow):
                 return newPath
             return None
 
-        def greedyInitialPath():
-            shuffledNodes = self.nodes[:]
-            random.shuffle(shuffledNodes)
-
-            for start in shuffledNodes:
-                path = [start]
-                unvisited = set(self.nodes) - {start}
-                totalDist = 0
-
-                while unvisited:
-                    nextNode = min(
-                        unvisited, key=lambda x: self.getDistance(path[-1], x)
-                    )
-                    if self.getDistance(path[-1], nextNode) == float("inf"):
+        def depthFirstInitialPath():
+            start = random.choice(self.nodes)
+            path = [start]
+            visited = {start}
+            stack = [(start, [edge[1] for edge in self.edges if edge[0] == start])]
+            
+            while stack:
+                node, neighbors = stack[-1]
+                
+                while neighbors:
+                    neighbor = neighbors.pop(0)
+                    if neighbor not in visited and self.getDistance(node, neighbor) < float("inf"):
+                        path.append(neighbor)
+                        visited.add(neighbor)
+                        stack.append((neighbor, [edge[1] for edge in self.edges if edge[0] == neighbor]))
                         break
-                    path.append(nextNode)
-                    unvisited.remove(nextNode)
-                    totalDist += self.getDistance(path[-2], nextNode)
+                else:
+                    stack.pop()
+            
+            if len(path) == len(self.nodes) and self.getDistance(path[-1], start) < float("inf"):
+                path.append(start)
+                return path
+    
+            return self.nodes + [self.nodes[0]] 
 
-                if not unvisited and self.getDistance(path[-1], start) < float("inf"):
-                    path.append(start)
-                    return path
-
-            shuffledNodes.append(shuffledNodes[0])
-            return shuffledNodes
-
-        currentPath = greedyInitialPath()
+        currentPath = depthFirstInitialPath()
         currentDistance = totalDistance(currentPath)
+        firstDistance = currentDistance
+
+        startTime = time.perf_counter()
 
         bestPath = currentPath[:]
         bestDistance = currentDistance
 
         temperature = 1000
-        coolingRate = 0.995
+        coolingRate = 0.999
         minTemperature = 1e-3
         iterationsPerTemp = 1
 
@@ -338,24 +338,27 @@ class TSPApp(QMainWindow):
                 newDistance = totalDistance(newPath)
                 delta = newDistance - currentDistance
 
-                if delta < 0 or random.random() < math.exp(-delta / temperature):
+                if delta <= 0:
                     currentPath = newPath
                     currentDistance = newDistance
 
-                    if newDistance < bestDistance:
-                        bestPath = newPath
-                        bestDistance = newDistance
-                        print(f"{iteration} New best distance: {bestDistance}")
+                    bestPath = newPath
+                    bestDistance = newDistance
+                    # print(f"{iteration} New best distance: {bestDistance}")
+
+                elif random.random() < math.exp(-(delta) / temperature):
+                    currentPath = newPath
+                    currentDistance = newDistance
+                    # print(f"{iteration} New distance: {newDistance}")
                 
             if self.useModificationCheckBox.isChecked() :
-                temperature = 1000 / math.log(1 + (iteration + 1))
+                temperature = 3 / math.log(1 + (iteration + 1))
             else:
                 temperature *= coolingRate
             
             iteration += 1
-            print(iteration, temperature)
         
-        print(f"Iteration: {iteration}")
+        print(f"Iteration and first distance: {iteration} {firstDistance}")
 
         endTime = time.perf_counter()
         elapsedTime = endTime - startTime
