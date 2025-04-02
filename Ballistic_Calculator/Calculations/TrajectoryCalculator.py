@@ -1,8 +1,8 @@
 import numpy as np
 
-from Atmosphere import Atmosphere
-from DragTables import DragTable
-from TrajectoryPoint import TrajectoryPoint
+from Calculations.Atmosphere import Atmosphere
+from Calculations.DragTables import DragTable
+from Calculations.TrajectoryPoint import TrajectoryPoint
 
 G = 9.81  # Ускорение свободного падения, м/с²
 A = 0.00025  # Площадь поперечного сечения пули, м²
@@ -21,41 +21,43 @@ class TrajectoryCalculator:
         Cd = self.dragTable.dragCoefficient(mach, model)
         return 0.5 * Cd * density * A * velocity**2
 
-    def ballisticTrajectory(self, velocity, angle, windSpeed, windAngle, model='G1', dt=0.01, maxTime=10, minVinde = 30):
+    def ballisticTrajectory(self, velocity, angle, windSpeed, windAngle, model='G1', dt=0.01, maxTime=10, minVelocity = 30):
         """Вычисляет траекторию палета пули."""
         angleRad = np.radians(angle)
         windAngleRad = np.radians(windAngle)
 
-        windX = windSpeed * np.cos(windAngleRad)
-        windZ = windSpeed * np.sin(windAngleRad)
+        windX = -windSpeed * np.cos(windAngleRad)
+        windY = -windSpeed * np.sin(windAngleRad) 
 
         vx = velocity * np.cos(angleRad)
-        vy = velocity * np.sin(angleRad)
-        vz = 0
+        vy = 0
+        vz = velocity * np.sin(angleRad) 
 
         x, y, z = 0, 0, 0
 
+        density, soundVelocity = self.atmosphere.atAltitude(z)
+        mach = velocity / soundVelocity
+
         trajectory = []
         trajectory.append(TrajectoryPoint(
-                time=0, x=x, y=y, z=z, distance=0, velocity=velocity, 
-                mach=velocity / self.atmosphere.soundVelocity, drop=y, windage=z, energy=0.5 * M * velocity**2,
+                x=x, y=y, z=z, 
+                time=0, distance=0, velocity=velocity, mach=mach, 
+                drop=z, windage=y, energy=0.5 * M * velocity**2,
             ))
 
         t = 0
-        while t < maxTime and velocity > minVinde:
-            density, soundVelocity = self.atmosphere.atAltitude(y)
-            
-            mach = velocity / soundVelocity
-            
-            Fd = self.dragForce(mach, velocity, density, model)
+        while t < maxTime and velocity > minVelocity and z >= 0:
+            relativeVelocity = np.sqrt((vx - windX)**2 + (vy - windY)**2 + vz**2)
 
-            Fdx = Fd * ((vx - windX) / velocity)
-            Fdy = Fd * (vy / velocity)
-            Fdz = Fd * ((vz - windZ) / velocity)
+            Fd = self.dragForce(mach, relativeVelocity, density, model)
+
+            Fdx = Fd * ((vx - windX) / relativeVelocity)
+            Fdy = Fd * ((vy - windY) / relativeVelocity)
+            Fdz = Fd * (vz / relativeVelocity)
 
             ax = -Fdx / M
-            ay = -G - (Fdy / M)
-            az = -Fdz / M
+            ay = -Fdy / M
+            az = -G - (Fdz / M)
 
             vx += ax * dt
             vy += ay * dt
@@ -67,14 +69,17 @@ class TrajectoryCalculator:
 
             t += dt
 
-            velocity = np.sqrt((vx - windX)**2 + vy**2 + (vz - windZ)**2)
-            distance = np.sqrt(x**2 + z**2)
-            mach = velocity / self.atmosphere.soundVelocity
+            velocity = np.sqrt(vx**2 + vy**2 + vz**2)
+            distance = np.sqrt(x**2 + y**2)
+            density, soundVelocity = self.atmosphere.atAltitude(z)
+            mach = velocity / soundVelocity
             energy = 0.5 * M * velocity**2
 
             trajectory.append(TrajectoryPoint(
-                time=t, x=x, y=y, z=z, distance=distance, velocity=velocity, 
-                mach=mach, drop=y, windage=z, energy=energy,
+                x=x, y=y, z=z, 
+                time=t, distance=distance, velocity=velocity, 
+                mach=mach, 
+                drop=z, windage=y, energy=energy,
             ))
 
         return np.array(trajectory)

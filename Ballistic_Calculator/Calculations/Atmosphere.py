@@ -3,6 +3,9 @@ import numpy as np
 class Atmosphere:
     """Класс для расчета плотности воздуха и скорости звука в зависимости от высоты, температуры и влажности."""
 
+    T0 = 288.15  # Стандартная температура на уровне моря (К)
+    P0 = 101325  # Давление на уровне моря (Па)
+
     es0 = 6.1078  # Базовое давление насыщенного пара (гПа)
     svpCoeffs = [0.99999683, -0.90826951e-2, 0.78736169e-4, -0.61117958e-6,
                  0.43884187e-8, -0.29883885e-10, 0.21874425e-12]
@@ -29,13 +32,13 @@ class Atmosphere:
     def calculateDensity(self, temperature, pressure):
         """Вычисляет плотность воздуха с учетом температуры, давления и влажности."""
         tCelsius = temperature - 273.15
-        tk = temperature
+        tKelvins = temperature
 
         vaporSaturation = self.saturatedVaporPressure(tCelsius) * 100
         actualVaporPressure = vaporSaturation * self.humidity
         dryPressure = pressure - actualVaporPressure
 
-        return dryPressure / (self.dryAirK * tk) + actualVaporPressure / (self.vaporK * tk)
+        return dryPressure / (self.dryAirK * tKelvins) + actualVaporPressure / (self.vaporK * tKelvins)
 
     def calculateSoundVelocity(self, temperature):
         """Вычисляет скорость звука в воздухе с учетом температуры и влажности."""
@@ -49,14 +52,12 @@ class Atmosphere:
 
     def calculatePressureAtAltitude(self, altitude):
         """Рассчитывает давление на заданной высоте с учетом изменения температуры."""
-        T0 = 288.15  # Стандартная температура на уровне моря (К)
-        P0 = 101325  # Давление на уровне моря (Па)
-        return P0 * (1 + self.temperatureLapse * altitude / T0) ** (
+        return self.P0 * (1 + self.temperatureLapse * altitude / self.T0) ** (
             (self.gConstant * self.airMolarMass) / (self.gasConstant * self.temperatureLapse))
 
     def atAltitude(self, altitude):
         """Возвращает плотность воздуха и скорость звука на новой высоте."""
-        tNew = self.temperature + self.temperatureLapse * (altitude - self.altitude)
-        pNew = self.calculatePressureAtAltitude(altitude)
-        dNew = self.calculateDensity(tNew, pNew)
-        return dNew, self.calculateSoundVelocity(tNew)
+        temperatureNew = self.temperature + self.temperatureLapse * (altitude - self.altitude)
+        pressureNew = self.calculatePressureAtAltitude(altitude)
+        densityNew = self.calculateDensity(temperatureNew, pressureNew)
+        return densityNew, self.calculateSoundVelocity(temperatureNew)
