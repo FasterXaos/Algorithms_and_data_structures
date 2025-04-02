@@ -1,83 +1,55 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from DragTables import DragTable
-
-def dragForce(v, model='G1'):
-    """Вычисляет силу сопротивления воздуха"""
-    Cd = dragTable.dragCoefficient(v, model)
-    return 0.5 * Cd * Rho * A * v**2
-
-def ballisticTrajectory(v0, angle, windSpeed, windAngle, model='G1', dt=0.01, maxTime=10):
-    """
-    Вычисляет 3D-траекторию с учетом ветра.
-    """
-    angleRad = np.radians(angle)
-    windAngleRad = np.radians(windAngle)
-
-    windX = windSpeed * np.cos(windAngleRad)
-    windZ = windSpeed * np.sin(windAngleRad)
-
-    vx = v0 * np.cos(angleRad)
-    vy = v0 * np.sin(angleRad)
-    vz = 0
-
-    x, y, z = 0, 0, 0
-    trajectory = []
-
-    t = 0
-    while y >= 0 and t < maxTime:
-        v = np.sqrt((vx - windX)**2 + vy**2 + (vz - windZ)**2)
-        Fd = dragForce(v, model)
-
-        Fdx = Fd * ((vx - windX) / v)
-        Fdy = Fd * (vy / v)
-        Fdz = Fd * ((vz - windZ) / v)
-
-        ax = -Fdx / M
-        ay = -G - (Fdy / M)
-        az = -Fdz / M
-
-        vx += ax * dt
-        vy += ay * dt
-        vz += az * dt
-
-        x += vx * dt
-        y += vy * dt
-        z += vz * dt
-
-        trajectory.append((x, y, z))
-        t += dt
-
-    return np.array(trajectory)
-
-# Физические константы
-G = 9.81  # Ускорение свободного падения, м/с²
-Rho = 1.225  # Плотность воздуха, кг/м³
-A = 0.00025  # Площадь поперечного сечения пули, м²
-M = 0.01  # Масса пули, кг (10 грамм)
-SpeedOfSound = 343  # Скорость звука в м/с (на уровне моря при 20°C)
+from TrajectoryCalculator import TrajectoryCalculator
 
 # Параметры выстрела
 V0 = 800  # Начальная скорость (м/с)
 Angle = 10  # Угол выстрела (градусы)
 WindSpeed = 5  # Скорость ветра (м/с)
-WindAngle = 45  # Угол ветра в плоскости XZ (градусы)
+WindAngle = -45  # Угол ветра в плоскости XZ (градусы)
 
-dragTable = DragTable()
+calculator = TrajectoryCalculator()
 
-trajectoryG1 = ballisticTrajectory(V0, Angle, WindSpeed, WindAngle, model='G1')
-trajectoryG7 = ballisticTrajectory(V0, Angle, WindSpeed, WindAngle, model='G7')
+trajectoryG1 = calculator.ballisticTrajectory(V0, Angle, WindSpeed, WindAngle, model='G1')
+trajectoryG7 = calculator.ballisticTrajectory(V0, Angle, WindSpeed, WindAngle, model='G7')
 
 fig = plt.figure(figsize=(10, 7))
 ax = fig.add_subplot(111, projection='3d')
 
-ax.plot(trajectoryG1[:, 0], trajectoryG1[:, 2], trajectoryG1[:, 1], label="G1", color='b')
-ax.plot(trajectoryG7[:, 0], trajectoryG7[:, 2], trajectoryG7[:, 1], label="G7", color='r')
+x1 = np.array([point.x for point in trajectoryG1])
+y1 = np.array([point.y for point in trajectoryG1])
+z1 = np.array([point.z for point in trajectoryG1])
+
+x2 = np.array([point.x for point in trajectoryG7])
+y2 = np.array([point.y for point in trajectoryG7])
+z2 = np.array([point.z for point in trajectoryG7])
+
+ax.plot(x1, z1, y1, label="G1", color='b')
+ax.plot(x2, z2, y2, label="G7", color='r')
 
 ax.set_xlabel("Дальность (м)")
 ax.set_ylabel("Боковой снос (м)")
 ax.set_zlabel("Высота (м)")
-ax.set_title("Баллистическая траектория с учетом ветра")
+ax.set_title("Баллистическая траектория пули")
 ax.legend()
+plt.show()
+
+fig2, ax2 = plt.subplots(1, 2, figsize=(14, 6))
+
+ax2[0].plot(x1, z1, label="G1", color='b')
+ax2[0].plot(x2, z2, label="G7", color='r')
+ax2[0].set_xlabel("Дальность (м)")
+ax2[0].set_ylabel("Боковой снос (м)")
+ax2[0].set_title("Плоскость XZ (Дальность vs. Боковой снос)")
+ax2[0].legend()
+
+ax2[1].plot(x1, y1, label="G1", color='b')
+ax2[1].plot(x2, y2, label="G7", color='r')
+ax2[1].set_xlabel("Дальность (м)")
+ax2[1].set_ylabel("Высота (м)")
+ax2[1].set_title("Плоскость XY (Дальность vs. Высота)")
+ax2[1].legend()
+
+plt.tight_layout()
 plt.show()

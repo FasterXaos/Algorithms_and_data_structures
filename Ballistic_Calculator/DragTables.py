@@ -40,7 +40,7 @@ G7DragTable = {
 }
 
 class DragTable:
-    SPEED_OF_SOUND = 343
+    SpeedOfSound = 343
 
     def __init__(self):
         self.interpolators = {
@@ -58,11 +58,9 @@ class DragTable:
             ),
         }
 
-    def dragCoefficient(self, speedMS, model="G1"):
+    def dragCoefficient(self, mach, model="G1"):
         """Возвращает коэффициент сопротивления для заданной скорости (м/с) и модели."""
         if model not in self.interpolators:
             raise ValueError("Допустимые модели: 'G1' или 'G7'")
 
-        speedMach = speedMS / self.SPEED_OF_SOUND
-        return float(self.interpolators[model](speedMach))
-
+        return float(self.interpolators[model](mach))
