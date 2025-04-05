@@ -17,7 +17,7 @@ class TSPApp(QMainWindow):
         #self.generateTestGraph()
 
     def initUI(self):
-        self.setWindowTitle("Коммивояжер - метод ближайшего соседа")
+        self.setWindowTitle("Коммивояжер - метод имитации отжига")
         self.setGeometry(100, 100, 900, 600)
 
         self.centralWidget = QWidget()
