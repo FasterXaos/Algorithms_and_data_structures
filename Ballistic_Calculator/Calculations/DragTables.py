@@ -40,8 +40,6 @@ G7DragTable = {
 }
 
 class DragTable:
-    SpeedOfSound = 343
-
     def __init__(self):
         self.interpolators = {
             "G1": interp1d(
