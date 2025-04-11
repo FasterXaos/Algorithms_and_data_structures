@@ -6,7 +6,8 @@ import math
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
                              QVBoxLayout, QHBoxLayout, QWidget, QTextEdit, 
                              QTableWidget, QTableWidgetItem, QGraphicsScene, 
-                             QGraphicsView, QCheckBox, QFileDialog)
+                             QGraphicsView, QCheckBox, QFileDialog, QLineEdit, 
+                             QFormLayout, QFrame)
 from PyQt5.QtGui import QPen, QBrush, QPainter, QPolygonF, QIcon
 from PyQt5.QtCore import Qt, QPointF
 
@@ -17,7 +18,7 @@ class TSPApp(QMainWindow):
         #self.generateTestGraph()
 
     def initUI(self):
-        self.setWindowTitle("Коммивояжер - метод имитации отжига")
+        self.setWindowTitle("Коммивояжер - муравьиный алгоритм")
         self.setGeometry(100, 100, 900, 600)
 
         self.centralWidget = QWidget()
@@ -28,7 +29,7 @@ class TSPApp(QMainWindow):
         rightLayout = QVBoxLayout()
 
         self.calculateButton = QPushButton("Рассчитать")
-        self.calculateButton.clicked.connect(lambda: self.solveTsp())
+        self.calculateButton.clicked.connect(lambda: self.handleSolveTsp())
 
         self.undoButton = QPushButton("Отмена")
         self.undoButton.clicked.connect(self.undoAction)
@@ -68,6 +69,30 @@ class TSPApp(QMainWindow):
 
         leftLayout.addWidget(QLabel("Ребра"))
         leftLayout.addWidget(self.table)
+
+        paramsForm = QFormLayout()
+
+        self.antCountInput = QLineEdit("10")
+        self.iterationsInput = QLineEdit("20")
+        self.alphaInput = QLineEdit("1.0")
+        self.betaInput = QLineEdit("5.0")
+        self.evaporationRateInput = QLineEdit("0.5")
+        self.pheromoneDepositInput = QLineEdit("100.0")
+
+        paramsForm.addRow("Количество муравьев:", self.antCountInput)
+        paramsForm.addRow("Итерации:", self.iterationsInput)
+        paramsForm.addRow("Alpha (влияние феромона):", self.alphaInput)
+        paramsForm.addRow("Beta (влияние расстояния):", self.betaInput)
+        paramsForm.addRow("Коэффициент испарения:", self.evaporationRateInput)
+        paramsForm.addRow("Количество феромона:", self.pheromoneDepositInput)
+
+        leftLayout.addLayout(paramsForm)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        leftLayout.addWidget(line)
+
         leftLayout.addWidget(QLabel("Рассчитанный путь"))
         leftLayout.addWidget(self.resultText)
         leftLayout.addWidget(self.useModificationCheckBox)
@@ -195,6 +220,27 @@ class TSPApp(QMainWindow):
         weights = [edge[2] for edge in self.edges if (edge[0] == i and edge[1] == j)]
         return min(weights, default=float('inf'))
     
+    def handleSolveTsp(self):
+        try:
+            antCount = int(self.antCountInput.text())
+            iterations = int(self.iterationsInput.text())
+            alpha = float(self.alphaInput.text())
+            beta = float(self.betaInput.text())
+            evaporationRate = float(self.evaporationRateInput.text())
+            pheromoneDeposit = float(self.pheromoneDepositInput.text())
+
+            self.solveTsp(
+                antCount=antCount,
+                iterations=iterations,
+                alpha=alpha,
+                beta=beta,
+                evaporationRate=evaporationRate,
+                pheromoneDeposit=pheromoneDeposit
+            )
+        except ValueError:
+            self.resultText.setText("Ошибка: Проверьте корректность введённых параметров.")
+
+    
     def loadGraphFromExcel(self):
         filePath, _ = QFileDialog.getOpenFileName(self, "Выбрать файл Excel", "", "Excel Files (*.xlsx *.xls)")
         if not filePath:
@@ -268,97 +314,98 @@ class TSPApp(QMainWindow):
         df = pd.DataFrame(adjacency_matrix, columns=[f"V{j}" for j in range(num_nodes)], index=[f"V{i}" for i in range(num_nodes)])
         df.to_excel(filePath)
 
-    def solveTsp(self, maxIterations=10000):
+    def solveTsp(self, antCount=20, iterations=100, alpha=1.0, beta=5.0, evaporationRate=0.5, pheromoneDeposit=100.0):
         if not self.edges:
             return
 
         def totalDistance(path):
             return sum(self.getDistance(path[i], path[i + 1]) for i in range(len(path) - 1))
 
-        def isValidSwap(path, i, j):
-            newPath = path[:]
-            newPath[i], newPath[j] = newPath[j], newPath[i]
+        nodeCount = len(self.nodes)
+        pheromone = { (edge[0], edge[1]): 1.0 for edge in self.edges }
 
-            if (self.getDistance(newPath[i - 1], newPath[i]) < float("inf") and
-                self.getDistance(newPath[i], newPath[i + 1]) < float("inf") and
-                self.getDistance(newPath[j - 1], newPath[j]) < float("inf") and
-                self.getDistance(newPath[j], newPath[j + 1]) < float("inf")):
-                return newPath
-            return None
+        useModification = self.useModificationCheckBox.isChecked()
+        patternMemory = {}
 
-        def depthInitialPath():
-            start = random.choice(self.nodes)
-            path = [start]
-            visited = {start}
-            stack = [(start, [edge[1] for edge in self.edges if edge[0] == start])]
-            
-            while stack:
-                node, neighbors = stack[-1]
-                
-                while neighbors:
-                    neighbor = neighbors.pop(0)
-                    if neighbor not in visited and self.getDistance(node, neighbor) < float("inf"):
-                        path.append(neighbor)
-                        visited.add(neighbor)
-                        stack.append((neighbor, [edge[1] for edge in self.edges if edge[0] == neighbor]))
-                        break
-                else:
-                    stack.pop()
-            
-            if len(path) == len(self.nodes) and self.getDistance(path[-1], start) < float("inf"):
-                path.append(start)
-                return path
-    
-            return self.nodes + [self.nodes[0]] 
-
-        currentPath = depthInitialPath()
-        currentDistance = totalDistance(currentPath)
-        firstDistance = currentDistance
+        bestPath = None
+        bestDistance = float('inf')
 
         startTime = time.perf_counter()
 
-        bestPath = currentPath[:]
-        bestDistance = currentDistance
+        for iterationIndex in range(iterations):
+            allAntPaths = []
+            allAntDistances = []
 
-        temperature = 1000
-        coolingRate = 0.999
-        minTemperature = 1e-3
-        iterationsPerTemp = 1
+            for antIndex in range(antCount):
+                currentNode = random.choice(self.nodes)
+                visited = {currentNode}
+                path = [currentNode]
 
-        iteration = 0
-        while temperature > minTemperature and iteration < maxIterations:
-            for _ in range(iterationsPerTemp):
-                while True:
-                    i, j = sorted(random.randint(1, len(currentPath) - 2) for _ in range(2))
-                    newPath = isValidSwap(currentPath, i, j)
+                while len(visited) < nodeCount:
+                    possibleMoves = [(toNode, self.getDistance(currentNode, toNode)) 
+                                    for toNode in self.nodes 
+                                    if toNode not in visited and self.getDistance(currentNode, toNode) < float('inf')]
 
-                    if newPath:
+                    if not possibleMoves:
                         break
 
-                newDistance = totalDistance(newPath)
-                delta = newDistance - currentDistance
+                    moveProbabilities = []
+                    total = 0.0
+                    for toNode, distance in possibleMoves:
+                        pheromoneLevel = pheromone.get((currentNode, toNode), 1.0)
+                        heuristic = 1.0 / distance
+                        score = (pheromoneLevel ** alpha) * (heuristic ** beta)
+                        moveProbabilities.append((toNode, score))
+                        total += score
 
-                if delta <= 0:
-                    currentPath = newPath
-                    currentDistance = newDistance
+                    if total == 0.0:
+                        break
 
-                    bestPath = newPath
-                    bestDistance = newDistance
-                    # print(f"{iteration} New best distance: {bestDistance}")
+                    r = random.random()
+                    cumulative = 0.0
+                    for toNode, probability in moveProbabilities:
+                        cumulative += probability / total
+                        if r <= cumulative:
+                            nextNode = toNode
+                            break
+                    else:
+                        nextNode = moveProbabilities[-1][0]
 
-                elif random.random() < math.exp(-(delta) / temperature):
-                    currentPath = newPath
-                    currentDistance = newDistance
-                    # print(f"{iteration} New distance: {newDistance}")
-                
-            if self.useModificationCheckBox.isChecked() :
-                temperature = 3 / math.log(1 + (iteration + 1))
-            else:
-                temperature *= coolingRate
-            
-            iteration += 1
-        
-        print(f"Iteration and first distance: {iteration} {firstDistance}")
+                    path.append(nextNode)
+                    visited.add(nextNode)
+                    currentNode = nextNode
+
+                if len(path) == nodeCount and self.getDistance(path[-1], path[0]) < float("inf"):
+                    path.append(path[0])
+                    distance = totalDistance(path)
+                    allAntPaths.append(path)
+                    allAntDistances.append(distance)
+
+                    if distance < bestDistance:
+                        bestDistance = distance
+                        bestPath = path
+
+            for edgeKey in pheromone:
+                pheromone[edgeKey] *= (1 - evaporationRate)
+
+            for path, distance in zip(allAntPaths, allAntDistances):
+                for i in range(len(path) - 1):
+                    edge = (path[i], path[i + 1])
+                    if edge in pheromone:
+                        pheromone[edge] += pheromoneDeposit / distance
+
+            if useModification:
+                for path in allAntPaths:
+                    for i in range(len(path) - 1):
+                        key = (path[i], path[i + 1])
+                        if key in patternMemory:
+                            patternMemory[key] += 1
+                        else:
+                            patternMemory[key] = 1
+
+                for (i, j), count in patternMemory.items():
+                    if (i, j) in pheromone:
+                        pheromone[i, j] += (pheromoneDeposit * 0.1) * count
 
         endTime = time.perf_counter()
         elapsedTime = endTime - startTime
