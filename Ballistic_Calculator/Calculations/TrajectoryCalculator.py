@@ -2,21 +2,24 @@ import numpy as np
 
 from Calculations.Atmosphere import Atmosphere
 from Calculations.DragTables import DragTable
+from Calculations.Gravity import gravityAcceleration
 from Calculations.TrajectoryPoint import TrajectoryPoint
-
-G = 9.81  # Ускорение свободного падения, м/с²
 
 class TrajectoryCalculator:
     """Класс для расчета баллистической траектории пули."""
 
-    def __init__(self, pressure=101325, temperature=15, humidity=0.78):
+    def __init__(self, formFactor = 1.0, pressure=101325, temperature=15,
+                 humidity=0.78, latitude=55.75, elevation=200):
         self.M = 0.01
         self.A = 0.00025
+        self.formFactor = formFactor
+        self.latitude = latitude
+        self.elevation = elevation
 
         self.dragTable = DragTable()
         self.atmosphere = Atmosphere(pressure=pressure, temperature=temperature, humidity=humidity)
     
-    def acceleration(self, vx, vy, vz, windX, windY, density, mach, model):
+    def acceleration(self, vx, vy, vz, windX, windY, density, mach, model, g):
         """Вычисление ускорений по оcям с учётом аэродинамического сопротивления и силы тяжести."""
         relativeVelocity = np.sqrt((vx - windX)**2 + (vy - windY)**2 + vz**2)
         Fd = self.dragForce(mach, relativeVelocity, density, model)
@@ -27,11 +30,13 @@ class TrajectoryCalculator:
 
         ax = -Fdx / self.M
         ay = -Fdy / self.M
-        az = -G - (Fdz / self.M)
+        az = -g - (Fdz / self.M)
 
         return ax, ay, az
 
-    def ballisticTrajectory(self, velocity, angle, windSpeed, windAngle, model='G1', dt=0.01, maxTime=10, minVelocity = 30, method='euler'):
+    def ballisticTrajectory(self, velocity, angle, windSpeed, windAngle, dt=0.1,
+                            maxTime=100, minVelocity=30, minAltitude=0, maxDistance=np.inf,
+                            model='G1',method='euler'):
         """Вычисляет траекторию палета пули."""
         angleRad = np.radians(angle)
         windAngleRad = np.radians(windAngle)
@@ -56,9 +61,15 @@ class TrajectoryCalculator:
             ))
 
         t = 0
-        while t < maxTime and velocity > minVelocity and z >= 0:
-            if method == 'euler':
-                ax, ay, az = self.acceleration(vx, vy, vz, windX, windY, density, mach, model)
+        while (t < maxTime and
+               velocity > minVelocity and
+               z >= minAltitude and
+               np.sqrt(x**2 + y**2) <= maxDistance
+               ):
+            g = gravityAcceleration(latitude=self.latitude, altitude=self.elevation + z)
+
+            if method == 'Euler':
+                ax, ay, az = self.acceleration(vx, vy, vz, windX, windY, density, mach, model, g)
 
                 vx += ax * dt
                 vy += ay * dt
@@ -68,13 +79,13 @@ class TrajectoryCalculator:
                 y += vy * dt
                 z += vz * dt
 
-            elif method == 'rk4':
+            elif method == 'RK4':
                 def derivatives(state):
                     x, y, z, vx, vy, vz = state
                     density, soundVelocity = self.atmosphere.atAltitude(z)
                     velocity = np.sqrt(vx**2 + vy**2 + vz**2)
                     mach = velocity / soundVelocity
-                    ax, ay, az = self.acceleration(vx, vy, vz, windX, windY, density, mach, model)
+                    ax, ay, az = self.acceleration(vx, vy, vz, windX, windY, density, mach, model, g)
                     return np.array([vx, vy, vz, ax, ay, az])
                 
                 state = np.array([x, y, z, vx, vy, vz])
@@ -86,7 +97,7 @@ class TrajectoryCalculator:
                 x, y, z, vx, vy, vz = new_state
 
             else:
-                raise ValueError("Unknown integration method: choose 'euler' or 'rk4'")
+                raise ValueError("Unknown integration method: choose 'Euler' or 'RK4'")
             
             t += dt
 
@@ -108,4 +119,4 @@ class TrajectoryCalculator:
     def dragForce(self, mach, velocity, density, model='G1'):
         """Вычисляет силу сопротивления воздуха"""
         Cd = self.dragTable.dragCoefficient(mach, model)
-        return 0.5 * Cd * density * self.A * velocity**2
+        return 0.5 * self.formFactor * Cd * density * self.A * velocity**2
