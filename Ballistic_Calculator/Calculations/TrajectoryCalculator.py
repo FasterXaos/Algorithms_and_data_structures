@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import bisect, minimize
 
 from Calculations.Atmosphere import Atmosphere
 from Calculations.DragTables import DragTable
@@ -8,8 +9,10 @@ from Calculations.TrajectoryPoint import TrajectoryPoint
 class TrajectoryCalculator:
     """Класс для расчета баллистической траектории пули."""
 
-    def __init__(self, formFactor = 1.0, pressure=101325, temperature=15,
-                 humidity=0.78, latitude=55.75, elevation=200):
+    def __init__(self,
+            formFactor=1.0, pressure=101325, temperature=15,
+            humidity=0.78, latitude=55.75, elevation=200
+            ):
         self.M = 0.01
         self.A = 0.00025
         self.formFactor = formFactor
@@ -19,7 +22,11 @@ class TrajectoryCalculator:
         self.dragTable = DragTable()
         self.atmosphere = Atmosphere(pressure=pressure, temperature=temperature, humidity=humidity)
     
-    def acceleration(self, vx, vy, vz, windX, windY, density, mach, model, g):
+    def acceleration(self,
+            vx, vy, vz,
+            windX, windY,
+            density, mach, model, g
+            ):
         """Вычисление ускорений по оcям с учётом аэродинамического сопротивления и силы тяжести."""
         relativeVelocity = np.sqrt((vx - windX)**2 + (vy - windY)**2 + vz**2)
         Fd = self.dragForce(mach, relativeVelocity, density, model)
@@ -34,33 +41,38 @@ class TrajectoryCalculator:
 
         return ax, ay, az
 
-    def ballisticTrajectory(self, velocity, angle, windSpeed, windAngle, dt=0.1,
-                            maxTime=100, minVelocity=30, minAltitude=0, maxDistance=np.inf,
-                            model='G1',method='euler'):
+    def ballisticTrajectory(self,
+            velocity, horizAngle, vertAngle,
+            windSpeed, windAngle,
+            dt=0.1, maxTime=100,
+            minVelocity=30, minAltitude=0, maxDistance=np.inf,
+            model='G1',method='euler'
+            ):
         """Вычисляет траекторию палета пули."""
-        angleRad = np.radians(angle)
-        windAngleRad = np.radians(windAngle)
+        horizRad = np.radians(horizAngle)
+        vertRad  = np.radians(vertAngle)
 
+        windAngleRad = np.radians(windAngle)
         windX = -windSpeed * np.cos(windAngleRad)
         windY = -windSpeed * np.sin(windAngleRad) 
 
-        vx = velocity * np.cos(angleRad)
-        vy = 0
-        vz = velocity * np.sin(angleRad) 
+        vx = velocity * np.cos(vertRad) * np.cos(horizRad)
+        vy = velocity * np.cos(vertRad) * np.sin(horizRad)
+        vz = velocity * np.sin(vertRad)
 
-        x, y, z = 0, 0, 0
+        x = y = z = t = 0.0
 
         density, soundVelocity = self.atmosphere.atAltitude(z)
         mach = velocity / soundVelocity
 
+
         trajectory = []
         trajectory.append(TrajectoryPoint(
                 x=x, y=y, z=z, 
-                time=0, distance=0, velocity=velocity, mach=mach, 
+                time=t, distance=0.0, velocity=velocity, mach=mach, 
                 drop=z, windage=y, energy=0.5 * self.M * velocity**2,
             ))
 
-        t = 0
         while (t < maxTime and
                velocity > minVelocity and
                z >= minAltitude and
@@ -93,14 +105,13 @@ class TrajectoryCalculator:
                 k2 = dt * derivatives(state + 0.5 * k1)
                 k3 = dt * derivatives(state + 0.5 * k2)
                 k4 = dt * derivatives(state + k3)
-                new_state = state + (k1 + 2*k2 + 2*k3 + k4) / 6.0
-                x, y, z, vx, vy, vz = new_state
+                newState = state + (k1 + 2*k2 + 2*k3 + k4) / 6.0
+                x, y, z, vx, vy, vz = newState
 
             else:
                 raise ValueError("Unknown integration method: choose 'Euler' or 'RK4'")
             
             t += dt
-
             velocity = np.sqrt(vx**2 + vy**2 + vz**2)
             distance = np.sqrt(x**2 + y**2)
             density, soundVelocity = self.atmosphere.atAltitude(z)
@@ -115,6 +126,82 @@ class TrajectoryCalculator:
             ))
 
         return np.array(trajectory)
+    
+    def findAimAngles(
+            self,
+            velocity,
+            windSpeed, windAngle,
+            targetFunction, targetRadius,
+            dt=0.1, maxTime=100,
+            minVelocity=30, minAltitude=0, maxDistance=np.inf,
+            model='G1', method='RK4'
+        ):
+        """Приближённо подбирает углы горизонта и вертикали для попадания в цель."""
+        def cost(angles):
+            horizAngle, vertAngle = angles
+            traj = self.ballisticTrajectory(
+                velocity, horizAngle, vertAngle,
+                windSpeed, windAngle,
+                dt=dt, maxTime=maxTime,
+                minVelocity=minVelocity,
+                minAltitude=minAltitude,
+                maxDistance=maxDistance,
+                model=model, method=method
+            )
+            minD2 = float('inf')
+            for p in traj:
+                tx, ty, tz = targetFunction(p.time)
+                d2 = (p.x - tx)**2 + (p.y - ty)**2 + (p.z - tz)**2
+                if d2 < minD2:
+                    minD2 = d2
+            return minD2
+
+        x0, y0, z0 = targetFunction(0)
+        horizAngle0 = np.degrees(np.arctan2(y0, x0))
+        vertAngle0 = np.degrees(np.arctan2(z0, np.hypot(x0, y0)))
+
+        result = minimize(
+            cost,
+            x0=[horizAngle0, vertAngle0],
+            method='Nelder-Mead',
+            options={'xatol':1e-3, 'fatol':1e-2, 'maxiter':200}
+        )
+
+        horizontalAngle, verticalAngle = result.x
+        finalTrajectory = self.ballisticTrajectory(
+            velocity, horizontalAngle, verticalAngle,
+            windSpeed, windAngle,
+            dt=dt, maxTime=maxTime,
+            minVelocity=minVelocity,
+            minAltitude=minAltitude,
+            maxDistance=maxDistance,
+            model=model, method=method
+        )
+
+        closestPoint = None
+        closestDistance = float('inf')
+        impactTime = finalTrajectory[-1].time
+
+        for point in finalTrajectory:
+            targetX_t, targetY_t, targetZ_t = targetFunction(point.time)
+            distance = np.sqrt(
+                (point.x - targetX_t)**2 +
+                (point.y - targetY_t)**2 +
+                (point.z - targetZ_t)**2
+            )
+
+            if distance <= targetRadius:
+                closestPoint = point
+                break
+
+            
+            if distance < closestDistance:
+                closestDistance = distance
+                closestPoint = point
+
+        impactTime = closestPoint.time
+        return horizontalAngle, verticalAngle, finalTrajectory, impactTime
+
     
     def dragForce(self, mach, velocity, density, model='G1'):
         """Вычисляет силу сопротивления воздуха"""
