@@ -136,7 +136,7 @@ class TrajectoryCalculator:
             minVelocity=30, minAltitude=0, maxDistance=np.inf,
             model='G1', method='RK4'
         ):
-        """Приближённо подбирает углы горизонта и вертикали для попадания в цель."""
+        """Подбирает углы горизонта и вертикали для попадания в цель."""
         def cost(angles):
             horizAngle, vertAngle = angles
             traj = self.ballisticTrajectory(
@@ -183,11 +183,11 @@ class TrajectoryCalculator:
         impactTime = finalTrajectory[-1].time
 
         for point in finalTrajectory:
-            targetX_t, targetY_t, targetZ_t = targetFunction(point.time)
+            targetXt, targetYt, targetZt = targetFunction(point.time)
             distance = np.sqrt(
-                (point.x - targetX_t)**2 +
-                (point.y - targetY_t)**2 +
-                (point.z - targetZ_t)**2
+                (point.x - targetXt)**2 +
+                (point.y - targetYt)**2 +
+                (point.z - targetZt)**2
             )
 
             if distance <= targetRadius:

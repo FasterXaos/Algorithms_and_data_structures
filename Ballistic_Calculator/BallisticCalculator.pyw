@@ -449,7 +449,6 @@ class BallisticCalculator(QWidget):
             ax.grid(True)
             ax.legend()
 
-
         elif graphType == "X-Z":
             ax = self.figure.add_subplot(111)
             ax.plot(x, z, label=f"{self.modelSelect.currentText()} {self.methodSelect.currentText()}", linestyle=style, color=color)
@@ -462,7 +461,7 @@ class BallisticCalculator(QWidget):
 
         elif graphType == "Y-Z":
             ax = self.figure.add_subplot(111)
-            ax.plot(y, z, label="Y-Z", linestyle=style, color=color)
+            ax.plot(y, z, label=f"{self.modelSelect.currentText()} {self.methodSelect.currentText()}", linestyle=style, color=color)
             self.annotateEnd(ax, y, z, label="", color=color)
             ax.set_xlabel("Боковой снос (м)")
             ax.set_ylabel("Высота (м)")
@@ -482,19 +481,22 @@ class BallisticCalculator(QWidget):
                 y_sphere = targetRadius * np.sin(u) * np.sin(v) + yt[-1]
                 z_sphere = targetRadius * np.cos(v) + zt[-1]
                 ax.plot_surface(x_sphere, y_sphere, z_sphere, color='magenta', alpha=0.3)
+                ax.legend()
 
             elif graphType == "X-Y":
                 ax.plot(xt, yt, label="Цель", color='magenta', linestyle=':')
                 ax.add_patch(Circle((xt[-1], yt[-1]), targetRadius, color='magenta', alpha=0.3))
+                ax.legend()
 
             elif graphType == "X-Z":
                 ax.plot(xt, zt, label="Цель", color='magenta', linestyle=':')
                 ax.add_patch(Circle((xt[-1], zt[-1]), targetRadius, color='magenta', alpha=0.3))
+                ax.legend()
 
             elif graphType == "Y-Z":
                 ax.plot(yt, zt, label="Цель", color='magenta', linestyle=':')
                 ax.add_patch(Circle((yt[-1], zt[-1]), targetRadius, color='magenta', alpha=0.3))
-
+                ax.legend()
 
         self.canvas.draw()
 
