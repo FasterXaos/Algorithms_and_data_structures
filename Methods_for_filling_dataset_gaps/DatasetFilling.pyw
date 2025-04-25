@@ -2,7 +2,7 @@ import sys
 import pandas as pd
 import numpy as np
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QHBoxLayout, QFormLayout, QLabel,
+    QApplication, QWidget, QHBoxLayout, QFormLayout, QPlainTextEdit,
     QLineEdit, QPushButton, QComboBox, QFileDialog, QTableView,
     QFrame, QSizePolicy, QHeaderView, QSpacerItem, QMessageBox
 )
@@ -84,7 +84,10 @@ class DatasetFillingApp(QWidget):
         spacer = QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding)
         controlLayout.addItem(spacer)
 
-        self.statsLabel = QLabel("Записей: 0\nПропусков: 0%")
+        self.statsLabel = QPlainTextEdit("Записей: 0\nПропусков: 0%")
+        self.statsLabel.setReadOnly(True)
+        self.statsLabel.setStyleSheet("background-color: #f0f0f0;")
+        self.statsLabel.setFixedHeight(200)
         controlLayout.addRow(self.statsLabel)
 
         self.tableView = QTableView()
@@ -153,7 +156,7 @@ class DatasetFillingApp(QWidget):
         totalCells = self.dataFrame.size
         missingCells = self.dataFrame.isna().sum().sum()
         missingPercentage = (missingCells / totalCells) * 100 if totalCells > 0 else 0
-        self.statsLabel.setText(f"Записей: {len(self.dataFrame)}\nПропусков: {missingPercentage:.2f}%")
+        self.statsLabel.setPlainText(f"Записей: {len(self.dataFrame)}\nПропусков: {missingPercentage:.2f}%")
 
     def restoreData(self):
         if self.dataFrame.empty:
@@ -168,10 +171,10 @@ class DatasetFillingApp(QWidget):
             self.splineInterpolation()
         self.updateTable()
 
-        error = self.calculateRelativeError()
-        if error is not None:
-            current_text = self.statsLabel.text()
-            self.statsLabel.setText(f"{current_text}\nОтносительная погрешность: {error:.2f}%")
+        errorText = self.calculateRelativeError()
+        if errorText is not None:
+            currentText = self.statsLabel.toPlainText()
+            self.statsLabel.setPlainText(f"{currentText}\n{errorText}")
 
     def hotDeckImputation(self):
         df = self.dataFrame
@@ -198,7 +201,7 @@ class DatasetFillingApp(QWidget):
         def preprocessDataFrame(dataFrame):
             processedFrame = dataFrame.copy()
 
-            codes, uniques = pd.factorize(processedFrame['FullName'])
+            codes, _ = pd.factorize(processedFrame['FullName'])
             processedFrame['fullNameCode'] = codes.astype(float)
 
             passportParts = processedFrame['PassportInfo'].str.split(' ', expand=True)
@@ -208,10 +211,10 @@ class DatasetFillingApp(QWidget):
                 processedFrame['passportSeries'] * 1_000_000 + processedFrame['passportNumber']
             )
 
-            codes, uniques = pd.factorize(processedFrame['Departure'])
+            codes, _ = pd.factorize(processedFrame['Departure'])
             processedFrame['departureCode'] = codes.astype(float)
 
-            codes, uniques = pd.factorize(processedFrame['Destination'])
+            codes, _ = pd.factorize(processedFrame['Destination'])
             processedFrame['destinationCode'] = codes.astype(float)
 
             processedFrame['departureTimestamp'] = (
@@ -227,7 +230,7 @@ class DatasetFillingApp(QWidget):
 
             trainParts = processedFrame['Train'].str.extract(r'(?P<number>\d+)?(?P<letter>\D)?')
             processedFrame['trainNumber'] = pd.to_numeric(trainParts['number'], errors='coerce')
-            codes, uniques = pd.factorize(trainParts['letter'])
+            codes, _ = pd.factorize(trainParts['letter'])
             processedFrame['trainLetterCode'] = codes.astype(float)
 
             seatParts = processedFrame['SeatChoice'].str.split('-', expand=True)
@@ -250,6 +253,21 @@ class DatasetFillingApp(QWidget):
             'carriageNumber', 'seatNumber', 'totalCost', 'paymentCardCode'
         ]
 
+        readableNames = {
+            'fullNameCode': 'FullName',
+            'passportCode': 'PassportInfo',
+            'departureCode': 'Departure',
+            'destinationCode': 'Destination',
+            'departureTimestamp': 'DepartureDate',
+            'arrivalTimestamp': 'ArrivalDate',
+            'trainNumber': 'Train',
+            'trainLetterCode': 'Train',
+            'carriageNumber': 'SeatChoice',
+            'seatNumber': 'SeatChoice',
+            'totalCost': 'TotalCost',
+            'paymentCardCode': 'PaymentCard'
+        }
+
         originalSubset = originalProcessed[numericColumns]
         currentSubset = currentProcessed[numericColumns]
 
@@ -258,8 +276,18 @@ class DatasetFillingApp(QWidget):
 
         nonZeroMask = originalAligned != 0
         relativeErrors = ((originalAligned - currentAligned).abs() / originalAligned)[nonZeroMask]
-        totalRelativeError = relativeErrors.sum().sum() * 100
-        return totalRelativeError
+
+        columnErrors = relativeErrors.mean() * 100
+        groupedErrors = {}
+
+        for col, err in columnErrors.items():
+            readable = readableNames.get(col, col)
+            groupedErrors.setdefault(readable, []).append(err)
+
+        result = "\n".join([f"{col}: {sum(errs)/len(errs):.2f}%" for col, errs in groupedErrors.items()])
+        result += f"\nСуммарная ошибка: {columnErrors.sum():.2f}%"
+
+        return result
 
     def splineInterpolation(self):
         dataFrame = self.dataFrame.copy()
@@ -269,36 +297,33 @@ class DatasetFillingApp(QWidget):
         self.destIndex = None
         self.trainIndex = None
 
-        codes, uniques = pd.factorize(dataFrame['FullName'])
+        codes, self.fullNameIndex = pd.factorize(dataFrame['FullName'])
         dataFrame['fullNameCode'] = codes.astype(float)
         dataFrame.loc[dataFrame['FullName'].isna(), 'fullNameCode'] = np.nan
-        self.fullNameIndex = uniques
 
         passportParts = dataFrame['PassportInfo'].str.split(' ', expand=True)
         dataFrame['passport1'] = pd.to_numeric(passportParts[0], errors='coerce')
         dataFrame['passport2'] = pd.to_numeric(passportParts[1], errors='coerce')
         dataFrame['passportCode'] = dataFrame['passport1'] * 1_000_000 + dataFrame['passport2']
 
-        codes, uniques = pd.factorize(dataFrame['Departure'])
+        codes, self.depIndex = pd.factorize(dataFrame['Departure'])
         dataFrame['depCode'] = codes.astype(float)
         dataFrame.loc[dataFrame['Departure'].isna(), 'depCode'] = np.nan
-        self.depIndex = uniques
 
-        codes, uniques = pd.factorize(dataFrame['Destination'])
+        codes, self.destIndex = pd.factorize(dataFrame['Destination'])
         dataFrame['destCode'] = codes.astype(float)
         dataFrame.loc[dataFrame['Destination'].isna(), 'destCode'] = np.nan
-        self.destIndex = uniques
 
         dataFrame['depTs'] = pd.to_datetime(dataFrame['DepartureDate'], format='%Y-%m-%d-%H:%M', errors='coerce').astype('int64') / 1e9
         dataFrame['arrTs'] = pd.to_datetime(dataFrame['ArrivalDate'], format='%Y-%m-%d-%H:%M', errors='coerce').astype('int64') / 1e9
 
         trainParts = dataFrame['Train'].str.extract(r'(?P<num>\d+)?(?P<let>\D)?')
         dataFrame['trainNum'] = pd.to_numeric(trainParts['num'], errors='coerce')
-        codes, uniques = pd.factorize(trainParts['let'])
+        codes, self.trainIndex = pd.factorize(trainParts['let'])
         dataFrame['trainLetCode'] = codes.astype(float)
         dataFrame.loc[trainParts['let'].isna(), 'trainLetCode'] = np.nan
-        self.trainIndex = uniques
 
+        onlyCarriageMask = dataFrame['SeatChoice'].apply(lambda x: isinstance(x, str) and '-' not in x)
         seatParts = dataFrame['SeatChoice'].str.split('-', expand=True)
         dataFrame['carriage'] = pd.to_numeric(seatParts[0], errors='coerce')
         dataFrame['seat'] = pd.to_numeric(seatParts[1], errors='coerce')
@@ -336,13 +361,17 @@ class DatasetFillingApp(QWidget):
             lambda i: self.trainIndex[i] if 0 <= i < len(self.trainIndex) else ''
         )
 
-        def fmtSeat(row):
-            if pd.isna(row['carriage']): return ''
+        def formatSeat(row):
+            if pd.isna(row['carriage']):
+                return ''
             c = int(round(row['carriage']))
+            if onlyCarriageMask.get(row.name, False):
+                return str(c)
             if pd.isna(row['seat']) or int(round(row['seat'])) == 0:
                 return str(c)
             return f"{c}-{int(round(row['seat']))}"
-        dataFrame['SeatChoice'] = dfNum.apply(fmtSeat, axis=1)
+
+        dataFrame['SeatChoice'] = dfNum.apply(formatSeat, axis=1)
 
         dataFrame['TotalCost'] = dfNum['totalCost'].round().fillna(0).astype(int)
         dataFrame['PaymentCard'] = dfNum['paymentCard'].round().astype(np.int64).astype(str)
@@ -377,12 +406,13 @@ class DatasetFillingApp(QWidget):
         total = self.dataFrame.size
         missing = self.dataFrame.isna().sum().sum()
         percentMissing = round((missing / total) * 100, 2) if total > 0 else 0
-        self.statsLabel.setText(f"Записей: {len(self.dataFrame)}\nПропусков: {percentMissing}%")
+        self.statsLabel.setPlainText(f"Записей: {len(self.dataFrame)}\nПропусков: {percentMissing}%")
 
     def loadCSV(self):
         path, _ = QFileDialog.getOpenFileName(self, "Выбрать CSV файл", "", "CSV Files (*.csv)")
         if path:
             self.dataFrame = pd.read_csv(path)
+            self.originalDataFrame= self.dataFrame
             self.updateTable()
 
     def saveCSV(self):
