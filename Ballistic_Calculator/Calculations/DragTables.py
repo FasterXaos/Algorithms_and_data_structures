@@ -57,7 +57,6 @@ class DragTable:
         }
 
     def dragCoefficient(self, mach, model="G1"):
-        """Возвращает коэффициент сопротивления для заданной скорости (м/с) и модели."""
         if model not in self.interpolators:
             raise ValueError("Допустимые модели: 'G1' или 'G7'")
 

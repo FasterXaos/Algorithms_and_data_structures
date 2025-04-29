@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import bisect, minimize
+from scipy.optimize import minimize
 
 from Calculations.Atmosphere import Atmosphere
 from Calculations.DragTables import DragTable
@@ -7,8 +7,6 @@ from Calculations.Gravity import gravityAcceleration
 from Calculations.TrajectoryPoint import TrajectoryPoint
 
 class TrajectoryCalculator:
-    """Класс для расчета баллистической траектории пули."""
-
     def __init__(self,
             formFactor=1.0, pressure=101325, temperature=15,
             humidity=0.78, latitude=55.75, elevation=200
@@ -27,7 +25,6 @@ class TrajectoryCalculator:
             windX, windY,
             density, mach, model, g
             ):
-        """Вычисление ускорений по оcям с учётом аэродинамического сопротивления и силы тяжести."""
         relativeVelocity = np.sqrt((vx - windX)**2 + (vy - windY)**2 + vz**2)
         Fd = self.dragForce(mach, relativeVelocity, density, model)
 
@@ -48,7 +45,6 @@ class TrajectoryCalculator:
             minVelocity=30, minAltitude=0, maxDistance=np.inf,
             model='G1',method='euler'
             ):
-        """Вычисляет траекторию палета пули."""
         horizRad = np.radians(horizAngle)
         vertRad  = np.radians(vertAngle)
 
@@ -62,7 +58,8 @@ class TrajectoryCalculator:
 
         x = y = z = t = 0.0
 
-        density, soundVelocity = self.atmosphere.atAltitude(z)
+        g = gravityAcceleration(latitude=self.latitude, altitude=self.elevation + z)
+        density, soundVelocity = self.atmosphere.atAltitude(z, g)
         mach = velocity / soundVelocity
 
 
@@ -78,8 +75,6 @@ class TrajectoryCalculator:
                z >= minAltitude and
                np.sqrt(x**2 + y**2) <= maxDistance
                ):
-            g = gravityAcceleration(latitude=self.latitude, altitude=self.elevation + z)
-
             if method == 'Euler':
                 ax, ay, az = self.acceleration(vx, vy, vz, windX, windY, density, mach, model, g)
 
@@ -94,7 +89,7 @@ class TrajectoryCalculator:
             elif method == 'RK4':
                 def derivatives(state):
                     x, y, z, vx, vy, vz = state
-                    density, soundVelocity = self.atmosphere.atAltitude(z)
+                    density, soundVelocity = self.atmosphere.atAltitude(z, g)
                     velocity = np.sqrt(vx**2 + vy**2 + vz**2)
                     mach = velocity / soundVelocity
                     ax, ay, az = self.acceleration(vx, vy, vz, windX, windY, density, mach, model, g)
@@ -114,7 +109,8 @@ class TrajectoryCalculator:
             t += dt
             velocity = np.sqrt(vx**2 + vy**2 + vz**2)
             distance = np.sqrt(x**2 + y**2)
-            density, soundVelocity = self.atmosphere.atAltitude(z)
+            g = gravityAcceleration(latitude=self.latitude, altitude=self.elevation + z)
+            density, soundVelocity = self.atmosphere.atAltitude(z, g)
             mach = velocity / soundVelocity
             energy = 0.5 * self.M * velocity**2
 
@@ -127,6 +123,10 @@ class TrajectoryCalculator:
 
         return np.array(trajectory)
     
+    def dragForce(self, mach, velocity, density, model='G1'):
+        Cd = self.dragTable.dragCoefficient(mach, model)
+        return 0.5 * self.formFactor * Cd * density * self.A * velocity**2
+    
     def findAimAngles(
             self,
             velocity,
@@ -136,7 +136,6 @@ class TrajectoryCalculator:
             minVelocity=30, minAltitude=0, maxDistance=np.inf,
             model='G1', method='RK4'
         ):
-        """Подбирает углы горизонта и вертикали для попадания в цель."""
         def cost(angles):
             horizAngle, vertAngle = angles
             traj = self.ballisticTrajectory(
@@ -193,7 +192,6 @@ class TrajectoryCalculator:
             if distance <= targetRadius:
                 closestPoint = point
                 break
-
             
             if distance < closestDistance:
                 closestDistance = distance
@@ -201,9 +199,3 @@ class TrajectoryCalculator:
 
         impactTime = closestPoint.time
         return horizontalAngle, verticalAngle, finalTrajectory, impactTime
-
-    
-    def dragForce(self, mach, velocity, density, model='G1'):
-        """Вычисляет силу сопротивления воздуха"""
-        Cd = self.dragTable.dragCoefficient(mach, model)
-        return 0.5 * self.formFactor * Cd * density * self.A * velocity**2
