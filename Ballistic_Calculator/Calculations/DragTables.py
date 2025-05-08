@@ -58,6 +58,5 @@ class DragTable:
 
     def dragCoefficient(self, mach, model="G1"):
         if model not in self.interpolators:
-            raise ValueError("Допустимые модели: 'G1' или 'G7'")
-
+            raise ValueError("Acceptable models: 'G1' or 'G7'")
         return float(self.interpolators[model](mach))

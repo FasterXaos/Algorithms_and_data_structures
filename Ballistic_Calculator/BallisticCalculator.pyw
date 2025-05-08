@@ -1,12 +1,15 @@
 import sys
+import time
 import numpy as np
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QComboBox, QFormLayout,
     QTableWidget, QTableWidgetItem, QTabWidget, QScrollArea,
-    QHeaderView
+    QHeaderView, QFileDialog, QAbstractItemView, QShortcut,
+    QAction
 )
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont, QIcon, QGuiApplication, QKeySequence
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle
@@ -22,6 +25,7 @@ class BallisticCalculator(QWidget):
         self.setWindowIcon(QIcon("assets/scope.png"))
         self.setWindowTitle("Баллистический калькулятор")
         self.calculator = TrajectoryCalculator()
+        self.params = None
         self.trajectory = None
         self.targetTrajectory = None
         self.targetRadius = None
@@ -90,7 +94,9 @@ class BallisticCalculator(QWidget):
         self.minAltitudeInput  = QLineEdit("-10")
         self.maxDistanceInput  = QLineEdit("5000")
         self.integrationStep   = QLineEdit("0.1")
+        self.displayStep       = QLineEdit("20")
         self.methodSelect  = QComboBox(); self.methodSelect.addItems(["Euler", "RK4"])
+        self.methodSelect.setCurrentIndex(1)
         self.graphSelect   = QComboBox(); self.graphSelect.addItems(["3D", "X-Y", "X-Z", "Y-Z", "Таблица значений"])
         self.graphSelect.currentTextChanged.connect(self.updateGraph)
         calculationForm.addRow(QLabel("Параметры расчета", font=boldFont))
@@ -98,9 +104,14 @@ class BallisticCalculator(QWidget):
         calculationForm.addRow("Мин. высота (м):", self.minAltitudeInput)
         calculationForm.addRow("Макс. дальность (м):", self.maxDistanceInput)
         calculationForm.addRow("Шаг интегрирования (с):", self.integrationStep)
+        calculationForm.addRow("Шаг отображения (с):", self.displayStep)
         calculationForm.addRow("Метод:", self.methodSelect)
         calculationForm.addRow("График:", self.graphSelect)
         self.tabs.addTab(calculationTab, "Расчет")
+
+        self.saveTableButton = QPushButton("Сохранить таблицу")
+        self.saveTableButton.clicked.connect(self.saveTable)
+        controlLayout.addWidget(self.saveTableButton)
 
         targetTab = QWidget(); targetForm = QFormLayout(targetTab)
         self.targetRadiusInput = QLineEdit("1.0")
@@ -124,6 +135,9 @@ class BallisticCalculator(QWidget):
         controlLayout.addLayout(buttonsLayout)
 
         self.aimResultLabel = QLabel("")
+        self.aimResultLabel.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+        )
         controlLayout.addWidget(self.aimResultLabel)
 
         scroll = QScrollArea()
@@ -138,6 +152,14 @@ class BallisticCalculator(QWidget):
         self.canvas = FigureCanvas(self.figure)
         plotLayout.addWidget(self.canvas)
         self.table = QTableWidget()
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        copyShortcut = QShortcut(QKeySequence("Ctrl+C"), self.table)
+        copyShortcut.activated.connect(self.copyTableSelection)
+        self.table.setContextMenuPolicy(Qt.ActionsContextMenu)
+        copyAction = QAction("Копировать", self.table)
+        copyAction.triggered.connect(self.copyTableSelection)
+        self.table.addAction(copyAction)
         self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
             "X (м)", "Y (м)", "Z (м)", "t (с)", "Dist (м)", "V (м/с)",
@@ -184,12 +206,15 @@ class BallisticCalculator(QWidget):
     
     def calculateTrajectory(self):
         params = self.collectParameters()
+        self.params = params
         self.calculator.M = params['mass']
         self.calculator.A = params['area']
         self.calculator.formFactor = params['formFactor']
         self.calculator.atmosphere = Atmosphere(params['pressure'], params['temp'], params['humidity'])
         self.calculator.latitude = params['lat']
         self.calculator.elevation = params['elev']
+
+        startTime = time.perf_counter()
 
         self.trajectoryRaw = self.calculator.ballisticTrajectory(
             params['v0'], params['horizAngle'], params['vertAngle'],
@@ -199,6 +224,9 @@ class BallisticCalculator(QWidget):
             model=params['model'], method=params['method']
         )
         self.trajectory = self.extractXYZ(self.trajectoryRaw)
+
+        endTime = time.perf_counter()
+        computeDuration = endTime - startTime
 
         radius = float(self.targetRadiusInput.text())
         def makeExpr(expr):
@@ -215,12 +243,14 @@ class BallisticCalculator(QWidget):
         horiz = params['horizAngle']
         vert = params['vertAngle']
         finalTime = self.trajectoryRaw[-1].time
-        self.aimResultLabel.setText(f"Гор. угол: {horiz:.2f}°  Вер. угол: {vert:.2f}°\nВремя: {finalTime:.2f} с")
+        self.aimResultLabel.setText(f"Гор. угол: {horiz:.2f}°  Вер. угол: {vert:.2f}°\n"
+                                    f"Время: {finalTime:.2f} с  |  Время расчета: {computeDuration:.2f} с")
 
         self.updateGraph()
 
     def calculateAim(self):
         params = self.collectParameters()
+        self.params = params
         self.calculator.M = params['mass']
         self.calculator.A = params['area']
         self.calculator.formFactor = params['formFactor']
@@ -235,6 +265,8 @@ class BallisticCalculator(QWidget):
         xFunc, yFunc, zFunc = map(makeExpr, [self.targetXExpr.text(), self.targetYExpr.text(), self.targetZExpr.text()])
         def targetFunc(t):
             return float(xFunc(t)), float(yFunc(t)), float(zFunc(t))
+        
+        startTime = time.perf_counter()
 
         horiz, vert, trajectory, impactTime = self.calculator.findAimAngles(
             params['v0'], params['windSpeed'], params['windAngle'],
@@ -246,11 +278,15 @@ class BallisticCalculator(QWidget):
         self.trajectoryRaw = [p for p in trajectory if p.time <= impactTime]
         self.trajectory = self.extractXYZ(self.trajectoryRaw)
 
+        endTime = time.perf_counter()
+        computeDuration = endTime - startTime
+
         times = np.arange(0, impactTime+params['dt'], params['dt'])
         self.targetTrajectory = np.array([targetFunc(t) for t in times])
         self.targetRadius = radius
         self.updateGraph()
-        self.aimResultLabel.setText(f"Гор. угол: {horiz:.2f}°  Вер. угол: {vert:.2f}°\nВремя: {impactTime:.2f} с")
+        self.aimResultLabel.setText(f"Гор. угол: {horiz:.2f}°  Вер. угол: {vert:.2f}°\n"
+                                    f"Время: {impactTime:.2f} с  |  Время расчета: {computeDuration:.2f} с")
 
     def annotateEnd(self, ax, x, y, z=None, label='', color='black'):
         if z is None:
@@ -259,6 +295,28 @@ class BallisticCalculator(QWidget):
         else:
             ax.scatter(x[-1], y[-1], z[-1], color=color, s=30)
             ax.text(x[-1], y[-1], z[-1], f"{label}", color=color)
+    
+    def copyTableSelection(self):
+        ranges = self.table.selectedRanges()
+        if not ranges:
+            return
+        r = ranges[0]
+
+        visibleCols = [
+            j for j in range(r.leftColumn(), r.rightColumn()+1)
+            if not self.table.isColumnHidden(j)
+        ]
+
+        rows = []
+        for i in range(r.topRow(), r.bottomRow()+1):
+            cols = []
+            for j in visibleCols:
+                item = self.table.item(i, j)
+                cols.append(item.text() if item else "")
+            rows.append("\t".join(cols))
+
+        text = "\n".join(rows)
+        QGuiApplication.clipboard().setText(text)
 
     def extractXYZ(self, trajectory):
         x = np.array([p.x for p in trajectory])
@@ -289,10 +347,34 @@ class BallisticCalculator(QWidget):
 
         if graphType == "Таблица значений":
             self.table.show()
-            self.table.setRowCount(len(self.trajectoryRaw))
-            for i, p in enumerate(self.trajectoryRaw):
+
+            self.table.setColumnHidden(4, True)
+            self.table.setColumnHidden(7, True)
+            self.table.setColumnHidden(8, True)
+
+            try:
+                displayDt = float(self.displayStep.text()) if self.displayStep.text() else self.params['dt']
+            except:
+                displayDt = self.params['dt']
+
+            step = max(1, int(round(displayDt / self.params['dt'])))
+            sliced = list(self.trajectoryRaw[::step])
+            
+            lastPoint = self.trajectoryRaw[-1]
+            if sliced[-1].time != lastPoint.time:
+                sliced.append(lastPoint)
+
+            maxIndex = max(range(len(self.trajectoryRaw)), key=lambda i: self.trajectoryRaw[i].z)
+            maxPoint = self.trajectoryRaw[maxIndex]
+
+            if all(abs(p.time - maxPoint.time) > 1e-6 for p in sliced):
+                insertPos = next(i for i,p in enumerate(sliced) if p.time > maxPoint.time)
+                sliced.insert(insertPos, maxPoint)
+
+            self.table.setRowCount(len(sliced))
+            for i, p in enumerate(sliced):
                 for j, val in enumerate((p.x, p.y, p.z, p.time, p.distance, p.velocity, p.mach, p.drop, p.windage, p.energy)):
-                    self.table.setItem(i,j,QTableWidgetItem(f"{val:.2f}"))
+                    self.table.setItem(i, j, QTableWidgetItem(f"{val:.2f}"))
             return
         
         self.canvas.show()
@@ -357,6 +439,17 @@ class BallisticCalculator(QWidget):
   
         ax.legend()
         self.canvas.draw()
+
+    def saveTable(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Сохранить таблицу", "trajectory.csv", "CSV Files (*.csv)")
+        if path:
+            with open(path, 'w', encoding='utf-8') as f:
+                headers = [self.table.horizontalHeaderItem(col).text() for col in range(self.table.columnCount())]
+                f.write(','.join(headers) + '\n')
+
+                for row in range(self.table.rowCount()):
+                    values = [self.table.item(row,col).text() for col in range(self.table.columnCount())]
+                    f.write(','.join(values) + '\n')
 
 
 if __name__ == "__main__":
