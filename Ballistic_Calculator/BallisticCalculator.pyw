@@ -194,6 +194,7 @@ class BallisticCalculator(QWidget):
         dt         = float(self.integrationStep.text())
         model      = self.modelSelect.currentText()
         method     = self.methodSelect.currentText()
+        
         return {
             'v0': v0, 'windSpeed': windSpeed, 'windAngle': windAngle,
             'horizAngle': horizAngle, 'vertAngle': vertAngle,
