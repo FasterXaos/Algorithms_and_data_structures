@@ -31,6 +31,7 @@ class BallisticCalculator(QWidget):
         self.targetRadius = None
 
         self.initUI()
+        self.resize(900, 550)
 
     def initUI(self):
         mainLayout = QHBoxLayout(self)
@@ -144,7 +145,7 @@ class BallisticCalculator(QWidget):
         container = QWidget(); container.setLayout(controlLayout)
         scroll.setWidgetResizable(True)
         scroll.setWidget(container)
-        scroll.setFixedWidth(300)
+        scroll.setFixedWidth(350)
         mainLayout.addWidget(scroll)
 
         plotLayout = QVBoxLayout()
